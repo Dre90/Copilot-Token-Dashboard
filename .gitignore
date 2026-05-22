@@ -1,0 +1,23 @@
+# OS files
+.DS_Store
+
+# Logs
+*.log
+.ai_*.log
+
+# Environment files (keep templates)
+.env
+.env.*
+!.env.example
+
+# Dependencies and build artifacts
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local database files
+data.db
+data.db-*
+*.sqlite
+*.sqlite3

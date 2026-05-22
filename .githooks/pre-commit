@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -eu
+
+echo "[pre-commit] Running format and lint checks..."
+mise run format:check
+mise run lint

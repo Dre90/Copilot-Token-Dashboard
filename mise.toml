@@ -1,0 +1,88 @@
+[tools]
+node = "26"
+
+[env]
+OTLP_PORT = "4318"
+API_PORT  = "4319"
+DB_PATH   = "{{config_root}}/server/data.db"
+
+[tasks.install]
+description = "Install deps in server and web"
+run = [
+  "npm --prefix server install",
+  "npm --prefix web install",
+]
+
+[tasks.dev]
+description = "Run server and web in parallel"
+depends = ["dev:server", "dev:web"]
+
+[tasks."dev:server"]
+run = "npm --prefix server run dev"
+
+[tasks."dev:web"]
+run = "npm --prefix web run dev"
+
+[tasks.build]
+run = [
+  "npm --prefix server run build",
+  "npm --prefix web run build",
+]
+
+[tasks.typecheck]
+run = [
+  "npm --prefix server run typecheck",
+  "npm --prefix web run typecheck",
+]
+
+[tasks.lint]
+description = "Run oxlint in server and web"
+run = [
+  "npm --prefix server run lint",
+  "npm --prefix web run lint",
+]
+
+[tasks."lint:fix"]
+description = "Run oxlint --fix in server and web"
+run = [
+  "npm --prefix server run lint:fix",
+  "npm --prefix web run lint:fix",
+]
+
+[tasks.format]
+description = "Run oxfmt write in server and web"
+run = [
+  "npm --prefix server run format",
+  "npm --prefix web run format",
+]
+
+[tasks."format:check"]
+description = "Run oxfmt check in server and web"
+run = [
+  "npm --prefix server run format:check",
+  "npm --prefix web run format:check",
+]
+
+[tasks.test]
+description = "Run tests in server and web"
+run = [
+  "npm --prefix server run test",
+  "npm --prefix web run test",
+]
+
+[tasks."test:server"]
+run = "npm --prefix server run test"
+
+[tasks."test:web"]
+run = "npm --prefix web run test"
+
+[tasks.clean]
+description = "Remove SQLite db file"
+run = "rm -f server/data.db"
+
+[tasks."hooks:install"]
+description = "Configure local git hooks from .githooks"
+run = [
+  "git config core.hooksPath .githooks",
+  "chmod +x .githooks/pre-commit .githooks/pre-push",
+]

@@ -1,0 +1,19 @@
+# Dependencies and build artifacts
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# Environment files (keep templates)
+.env
+.env.*
+!.env.example
+
+# Local SQLite files
+data.db
+data.db-*
+*.sqlite
+*.sqlite3
