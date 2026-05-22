@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { CopilotDashboard, CopilotHistory } from "./features/copilot/components";
+import { CopilotDashboard, CopilotHelp, CopilotHistory } from "./features/copilot/components";
 import { copilotApi } from "./api/copilot";
 
-type Tab = "live" | "history";
+type Tab = "live" | "history" | "help";
 type Theme = "dark" | "light";
 
 export function App() {
@@ -57,6 +57,16 @@ export function App() {
           >
             History
           </button>
+          <button
+            onClick={() => setTab("help")}
+            className={`px-3 py-1.5 text-sm rounded ${
+              tab === "help"
+                ? "bg-amber-500/20 text-amber-200"
+                : "text-slate-400 hover:bg-slate-800"
+            }`}
+          >
+            Help
+          </button>
 
           <button
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
@@ -69,10 +79,12 @@ export function App() {
       </nav>
       {tab === "live" ? (
         <CopilotDashboard />
-      ) : (
+      ) : tab === "history" ? (
         <main className="max-w-6xl mx-auto px-3 sm:px-6 py-6">
           <CopilotHistory agent={agent} agents={agents} onAgentChange={setAgent} />
         </main>
+      ) : (
+        <CopilotHelp />
       )}
     </div>
   );
