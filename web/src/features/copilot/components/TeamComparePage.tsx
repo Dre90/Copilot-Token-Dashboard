@@ -1,4 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  type SortingState,
+  useReactTable,
+} from "@tanstack/react-table";
 import { toBlob } from "html-to-image";
 import {
   copilotApi,
@@ -19,6 +27,7 @@ type CombinedRow = {
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const TEAM_COMPARE_DEFAULT_SORTING: SortingState = [{ id: "weekCost", desc: true }];
 
 function fmtInt(n: number): string {
   return n.toLocaleString("nb-NO");
@@ -67,6 +76,12 @@ function fmtSignedPct(n: number | null): string {
   if (n === null) return "new";
   if (n === 0) return "0.0%";
   return `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
+}
+
+function sortIndicator(sorted: false | "asc" | "desc"): string {
+  if (sorted === "asc") return "▲";
+  if (sorted === "desc") return "▼";
+  return "↕";
 }
 
 function TeamCompareHeader({
@@ -235,41 +250,131 @@ function TeamCompareTable({
   captureMode,
   combined,
   loading,
+  sorting,
+  onSortingChange,
+  showControls,
+  onResetSorting,
 }: {
   captureMode: boolean;
   combined: CombinedRow[];
   loading: boolean;
+  sorting: SortingState;
+  onSortingChange: (next: SortingState) => void;
+  showControls: boolean;
+  onResetSorting?: () => void;
 }) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  const columns = useMemo<ColumnDef<CombinedRow>[]>(
+    () => [
+      { accessorKey: "model", header: "Model" },
+      { accessorKey: "weekRank", header: "7d rank" },
+      { accessorFn: (row) => row.week?.total_cost ?? 0, id: "weekCost", header: "7d cost" },
+      { accessorFn: (row) => row.week?.calls ?? 0, id: "weekCalls", header: "7d calls" },
+      {
+        accessorFn: (row) => avgCostPerCall(row.week),
+        id: "weekAvgCost",
+        header: "7d avg/call",
+      },
+      {
+        accessorFn: (row) => cacheShare(row.week),
+        id: "weekCache",
+        header: "7d cache %",
+      },
+      { accessorKey: "monthRank", header: "MTD rank" },
+      { accessorFn: (row) => row.month?.total_cost ?? 0, id: "monthCost", header: "MTD cost" },
+      { accessorFn: (row) => row.month?.calls ?? 0, id: "monthCalls", header: "MTD calls" },
+      {
+        accessorFn: (row) => avgCostPerCall(row.month),
+        id: "monthAvgCost",
+        header: "MTD avg/call",
+      },
+      {
+        accessorFn: (row) =>
+          pctDelta(row.week?.total_cost ?? 0, row.prevWeek?.total_cost ?? 0) ?? -999999,
+        id: "wowCost",
+        header: "WoW cost",
+      },
+    ],
+    [],
+  );
+
+  const table = useReactTable({
+    data: combined,
+    columns,
+    state: { sorting },
+    onSortingChange: (updater) => {
+      const next = typeof updater === "function" ? updater(sorting) : updater;
+      onSortingChange(next);
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  const sortedRows = table.getRowModel().rows;
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
+  const pagedRows = sortedRows.slice((page - 1) * pageSize, page * pageSize);
+  const rowsToRender = captureMode ? sortedRows : pagedRows;
+
+  useEffect(() => {
+    setPage(1);
+  }, [sorting, combined.length, pageSize]);
+
+  useEffect(() => {
+    setPage((p) => Math.min(Math.max(1, p), totalPages));
+  }, [totalPages]);
+
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+      {showControls && (
+        <div className="flex items-center justify-end border-b border-slate-800 px-3 py-2">
+          <button
+            type="button"
+            onClick={onResetSorting}
+            className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800"
+          >
+            Reset sort
+          </button>
+        </div>
+      )}
       <div className={captureMode ? "" : "overflow-x-auto"}>
         <table className={`w-full ${captureMode ? "text-[13px]" : "min-w-[980px] text-sm"}`}>
           <thead className="text-slate-500 text-xs uppercase tracking-wider">
-            <tr>
-              <th className="text-left px-3 py-2 font-normal">Model</th>
-              <th className="text-right px-3 py-2 font-normal">7d rank</th>
-              <th className="text-right px-3 py-2 font-normal">7d cost</th>
-              <th className="text-right px-3 py-2 font-normal">7d calls</th>
-              <th className="text-right px-3 py-2 font-normal">7d avg/call</th>
-              <th className="text-right px-3 py-2 font-normal">7d cache %</th>
-              <th className="text-right px-3 py-2 font-normal">MTD rank</th>
-              <th className="text-right px-3 py-2 font-normal">MTD cost</th>
-              <th className="text-right px-3 py-2 font-normal">MTD calls</th>
-              <th className="text-right px-3 py-2 font-normal">MTD avg/call</th>
-              <th className="text-right px-3 py-2 font-normal">WoW cost</th>
-            </tr>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id}>
+                {headerGroup.headers.map((header, idx) => {
+                  const sorted = header.column.getIsSorted();
+                  const alignClass = idx === 0 ? "text-left" : "text-right";
+                  return (
+                    <th key={header.id} className={`${alignClass} px-3 py-2 font-normal`}>
+                      <button
+                        type="button"
+                        onClick={header.column.getToggleSortingHandler()}
+                        className="inline-flex items-center gap-1 hover:text-slate-200"
+                      >
+                        <span>
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </span>
+                        <span className="text-[10px] text-slate-500">{sortIndicator(sorted)}</span>
+                      </button>
+                    </th>
+                  );
+                })}
+              </tr>
+            ))}
           </thead>
           <tbody>
-            {loading && <SkeletonTableRows rows={8} cols={10} />}
+            {loading && <SkeletonTableRows rows={8} cols={11} />}
             {!loading && combined.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={11} className="px-3 py-8 text-center text-slate-500">
                   No team data available yet.
                 </td>
               </tr>
             )}
             {!loading &&
-              combined.map((row) => {
+              rowsToRender.map(({ original: row }) => {
                 const wow = pctDelta(row.week?.total_cost ?? 0, row.prevWeek?.total_cost ?? 0);
 
                 return (
@@ -319,6 +424,48 @@ function TeamCompareTable({
           </tbody>
         </table>
       </div>
+      {showControls && !loading && sortedRows.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-slate-800 px-3 py-2 text-xs text-slate-400">
+          <div>
+            Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, sortedRows.length)} of{" "}
+            {sortedRows.length}
+          </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor="team-compare-page-size" className="text-slate-500">
+              Rows
+            </label>
+            <select
+              id="team-compare-page-size"
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs"
+            >
+              {[25, 50, 100].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+            >
+              Prev
+            </button>
+            <span className="tabular-nums text-slate-300 min-w-16 text-center">
+              {page}/{totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -334,6 +481,7 @@ export function TeamComparePage() {
   const [loading, setLoading] = useState(true);
   const [capturing, setCapturing] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
+  const [tableSorting, setTableSorting] = useState<SortingState>([...TEAM_COMPARE_DEFAULT_SORTING]);
   const captureRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -537,7 +685,14 @@ export function TeamComparePage() {
             week={week}
             weekTotal={weekTotal}
           />
-          <TeamCompareTable captureMode={true} combined={combined} loading={loading} />
+          <TeamCompareTable
+            captureMode={true}
+            combined={combined}
+            loading={loading}
+            sorting={tableSorting}
+            onSortingChange={setTableSorting}
+            showControls={false}
+          />
           <TeamCompareGuide />
         </div>
       </div>
@@ -557,7 +712,15 @@ export function TeamComparePage() {
           week={week}
           weekTotal={weekTotal}
         />
-        <TeamCompareTable captureMode={false} combined={combined} loading={loading} />
+        <TeamCompareTable
+          captureMode={false}
+          combined={combined}
+          loading={loading}
+          sorting={tableSorting}
+          onSortingChange={setTableSorting}
+          showControls={true}
+          onResetSorting={() => setTableSorting([...TEAM_COMPARE_DEFAULT_SORTING])}
+        />
         <TeamCompareGuide />
       </main>
     </>

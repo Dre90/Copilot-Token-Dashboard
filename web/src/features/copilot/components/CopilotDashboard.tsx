@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  type SortingState,
+  useReactTable,
+} from "@tanstack/react-table";
+import {
   copilotApi,
   openCopilotStream,
   type CopilotCall,
@@ -21,6 +29,8 @@ const WINDOWS = [
   { value: "7d", label: "7 d" },
   { value: "30d", label: "30 d" },
 ];
+
+const LIVE_DEFAULT_SORTING: SortingState = [{ id: "time", desc: true }];
 
 function fmtInt(n: number): string {
   return n.toLocaleString("nb-NO");
@@ -46,6 +56,12 @@ function fmtTodaySpan(nowMs: number): string {
   return `00:00 -> now (${hours}h ${mins}m)`;
 }
 
+function sortIndicator(sorted: false | "asc" | "desc"): string {
+  if (sorted === "asc") return "▲";
+  if (sorted === "desc") return "▼";
+  return "↕";
+}
+
 export function CopilotDashboard() {
   const [windowSel, setWindowSel] = useState("today");
   const [agent, setAgent] = useState("all");
@@ -56,6 +72,7 @@ export function CopilotDashboard() {
   const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
+  const [sorting, setSorting] = useState<SortingState>([...LIVE_DEFAULT_SORTING]);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [hoverTooltip, setHoverTooltip] = useState<{
     call: CopilotCall;
@@ -127,7 +144,37 @@ export function CopilotDashboard() {
 
   const totalCalls = summary?.calls ?? 0;
 
-  const visibleCalls = useMemo(() => calls, [calls]);
+  const tableColumns = useMemo<ColumnDef<CopilotCall>[]>(
+    () => [
+      {
+        accessorFn: (row) => Number(BigInt(row.start_ns) / 1_000_000n),
+        id: "time",
+        header: "Time",
+      },
+      { accessorKey: "model", header: "Model" },
+      { accessorKey: "agent", header: "Agent" },
+      { accessorKey: "input_tokens", header: "Input" },
+      { accessorKey: "cache_read_tokens", header: "Cache Read" },
+      { accessorKey: "cache_creation_tokens", header: "Cache Write" },
+      { accessorKey: "output_tokens", header: "Output" },
+      { accessorKey: "total_cost", header: "Cost" },
+    ],
+    [],
+  );
+
+  const table = useReactTable({
+    data: calls,
+    columns: tableColumns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  const visibleCalls = useMemo(
+    () => table.getRowModel().rows.map((row) => row.original),
+    [table, calls, sorting],
+  );
   const totalPages = Math.max(1, Math.ceil(visibleCalls.length / pageSize));
   const pagedCalls = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -271,16 +318,30 @@ export function CopilotDashboard() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-sm">
               <thead className="text-slate-500 text-xs uppercase tracking-wider">
-                <tr>
-                  <th className="text-left px-3 py-2 font-normal">Time</th>
-                  <th className="text-left px-3 py-2 font-normal">Model</th>
-                  <th className="text-left px-3 py-2 font-normal">Agent</th>
-                  <th className="text-right px-3 py-2 font-normal">Input</th>
-                  <th className="text-right px-3 py-2 font-normal">Cache Read</th>
-                  <th className="text-right px-3 py-2 font-normal">Cache Write</th>
-                  <th className="text-right px-3 py-2 font-normal">Output</th>
-                  <th className="text-right px-3 py-2 font-normal">Cost</th>
-                </tr>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header, idx) => {
+                      const sorted = header.column.getIsSorted();
+                      const alignClass = idx <= 2 ? "text-left" : "text-right";
+                      return (
+                        <th key={header.id} className={`${alignClass} px-3 py-2 font-normal`}>
+                          <button
+                            type="button"
+                            onClick={header.column.getToggleSortingHandler()}
+                            className="inline-flex items-center gap-1 hover:text-slate-200"
+                          >
+                            <span>
+                              {flexRender(header.column.columnDef.header, header.getContext())}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              {sortIndicator(sorted)}
+                            </span>
+                          </button>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                ))}
               </thead>
               <tbody>
                 {loading && <SkeletonTableRows rows={8} cols={8} />}
@@ -375,6 +436,13 @@ export function CopilotDashboard() {
                     </option>
                   ))}
                 </select>
+
+                <button
+                  onClick={() => setSorting([...LIVE_DEFAULT_SORTING])}
+                  className="px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800"
+                >
+                  Reset sort
+                </button>
 
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}

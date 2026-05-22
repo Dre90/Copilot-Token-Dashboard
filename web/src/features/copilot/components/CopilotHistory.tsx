@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  type SortingState,
+  useReactTable,
+} from "@tanstack/react-table";
+import {
   Bar,
   BarChart,
   CartesianGrid,
@@ -45,6 +53,10 @@ const BUCKETS: Array<{ value: HistoryBucket; label: string }> = [
   { value: "year", label: "Per year" },
 ];
 
+const TODAY_DEFAULT_SORTING: SortingState = [{ id: "time", desc: true }];
+const MODEL_PERF_DEFAULT_SORTING: SortingState = [{ id: "calls", desc: true }];
+const TRENDS_DEFAULT_SORTING: SortingState = [{ id: "bucket", desc: true }];
+
 function fmtInt(n: number): string {
   return n.toLocaleString("nb-NO");
 }
@@ -71,6 +83,12 @@ function toNumber(value: unknown): number {
     if (Number.isFinite(parsed)) return parsed;
   }
   return 0;
+}
+
+function sortIndicator(sorted: false | "asc" | "desc"): string {
+  if (sorted === "asc") return "▲";
+  if (sorted === "desc") return "▼";
+  return "↕";
 }
 
 export function CopilotHistory({
@@ -278,6 +296,116 @@ export function CopilotHistory({
     onBucketChange?.(next);
   };
 
+  const [todaySorting, setTodaySorting] = useState<SortingState>([...TODAY_DEFAULT_SORTING]);
+  const [modelPerfSorting, setModelPerfSorting] = useState<SortingState>([
+    ...MODEL_PERF_DEFAULT_SORTING,
+  ]);
+  const [trendsSorting, setTrendsSorting] = useState<SortingState>([...TRENDS_DEFAULT_SORTING]);
+  const [todayPage, setTodayPage] = useState(1);
+  const [todayPageSize, setTodayPageSize] = useState(25);
+  const [trendsPage, setTrendsPage] = useState(1);
+  const [trendsPageSize, setTrendsPageSize] = useState(25);
+
+  const todayTimelineRows = useMemo(() => todayCalls.slice(0, 120), [todayCalls]);
+  const todayColumns = useMemo<ColumnDef<CopilotCall>[]>(
+    () => [
+      {
+        accessorFn: (row) => Number(BigInt(row.start_ns) / 1_000_000n),
+        id: "time",
+        header: "Time",
+      },
+      { accessorKey: "model", header: "Model" },
+      { accessorKey: "agent", header: "Agent" },
+      {
+        accessorFn: (row) =>
+          row.input_tokens + row.cache_read_tokens + row.cache_creation_tokens + row.output_tokens,
+        id: "tokens",
+        header: "Tokens",
+      },
+      { accessorKey: "duration_ms", header: "Latency" },
+      { accessorKey: "total_cost", header: "Cost" },
+    ],
+    [],
+  );
+  const todayTable = useReactTable({
+    data: todayTimelineRows,
+    columns: todayColumns,
+    state: { sorting: todaySorting },
+    onSortingChange: setTodaySorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+  const todaySortedRows = todayTable.getRowModel().rows;
+  const todayTotalPages = Math.max(1, Math.ceil(todaySortedRows.length / todayPageSize));
+  const todayPagedRows = todaySortedRows.slice(
+    (todayPage - 1) * todayPageSize,
+    todayPage * todayPageSize,
+  );
+
+  const modelPerfColumns = useMemo<ColumnDef<(typeof modelPerformance)[number]>[]>(
+    () => [
+      { accessorKey: "model", header: "Model" },
+      { accessorKey: "calls", header: "Calls" },
+      { accessorKey: "avgLatency", header: "Avg duration" },
+      { accessorKey: "p90Latency", header: "P90 duration" },
+      { accessorKey: "p50Ttft", header: "P50 TTFT" },
+      { accessorKey: "p90Ttft", header: "P90 TTFT" },
+    ],
+    [],
+  );
+  const modelPerformanceTable = useReactTable({
+    data: modelPerformance,
+    columns: modelPerfColumns,
+    state: { sorting: modelPerfSorting },
+    onSortingChange: setModelPerfSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  const trendsRows = useMemo(() => [...data].reverse(), [data]);
+  const trendsColumns = useMemo<ColumnDef<CopilotBucket>[]>(
+    () => [
+      { accessorKey: "bucket", header: "Bucket" },
+      { accessorKey: "calls", header: "Calls" },
+      { accessorKey: "input_tokens", header: "Input" },
+      { accessorKey: "cache_read_tokens", header: "Cache R" },
+      { accessorKey: "cache_creation_tokens", header: "Cache W" },
+      { accessorKey: "output_tokens", header: "Output" },
+      { accessorKey: "cost", header: "Cost" },
+    ],
+    [],
+  );
+  const trendsTable = useReactTable({
+    data: trendsRows,
+    columns: trendsColumns,
+    state: { sorting: trendsSorting },
+    onSortingChange: setTrendsSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+  const trendsSortedRows = trendsTable.getRowModel().rows;
+  const trendsTotalPages = Math.max(1, Math.ceil(trendsSortedRows.length / trendsPageSize));
+  const trendsPagedRows = trendsSortedRows.slice(
+    (trendsPage - 1) * trendsPageSize,
+    trendsPage * trendsPageSize,
+  );
+
+  useEffect(() => {
+    setTodayPage(1);
+  }, [todaySorting, todayCalls.length, todayPageSize]);
+
+  useEffect(() => {
+    setTrendsPage(1);
+  }, [trendsSorting, trendsRows.length, trendsPageSize]);
+
+  useEffect(() => {
+    setTodayPage((p) => Math.min(Math.max(1, p), todayTotalPages));
+  }, [todayTotalPages]);
+
+  useEffect(() => {
+    setTrendsPage((p) => Math.min(Math.max(1, p), trendsTotalPages));
+  }, [trendsTotalPages]);
+
   return (
     <div className="space-y-6">
       <CopilotHistoryToolbar
@@ -391,30 +519,54 @@ export function CopilotHistory({
               </section>
 
               <section className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-                <div className="px-3 py-2 border-b border-slate-800 text-sm uppercase tracking-widest text-slate-500">
-                  Today's timeline
+                <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between gap-2">
+                  <div className="text-sm uppercase tracking-widest text-slate-500">
+                    Today's timeline
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTodaySorting([...TODAY_DEFAULT_SORTING])}
+                    className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800"
+                  >
+                    Reset sort
+                  </button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[760px] text-sm">
                     <thead className="text-slate-500 text-xs uppercase tracking-wider">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-normal">Time</th>
-                        <th className="text-left px-3 py-2 font-normal">Model</th>
-                        <th className="text-left px-3 py-2 font-normal">Agent</th>
-                        <th className="text-right px-3 py-2 font-normal">Tokens</th>
-                        <th className="text-right px-3 py-2 font-normal">Latency</th>
-                        <th className="text-right px-3 py-2 font-normal">Cost</th>
-                      </tr>
+                      {todayTable.getHeaderGroups().map((headerGroup) => (
+                        <tr key={headerGroup.id}>
+                          {headerGroup.headers.map((header, idx) => (
+                            <th
+                              key={header.id}
+                              className={`${idx <= 2 ? "text-left" : "text-right"} px-3 py-2 font-normal`}
+                            >
+                              <button
+                                type="button"
+                                onClick={header.column.getToggleSortingHandler()}
+                                className="inline-flex items-center gap-1 hover:text-slate-200"
+                              >
+                                <span>
+                                  {flexRender(header.column.columnDef.header, header.getContext())}
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  {sortIndicator(header.column.getIsSorted())}
+                                </span>
+                              </button>
+                            </th>
+                          ))}
+                        </tr>
+                      ))}
                     </thead>
                     <tbody>
-                      {todayCalls.length === 0 && (
+                      {todayTimelineRows.length === 0 && (
                         <tr>
                           <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
                             No calls recorded today.
                           </td>
                         </tr>
                       )}
-                      {todayCalls.slice(0, 120).map((c) => (
+                      {todayPagedRows.map(({ original: c }) => (
                         <tr
                           key={c.span_id}
                           className="border-t border-slate-800/70 hover:bg-slate-800/40"
@@ -447,6 +599,49 @@ export function CopilotHistory({
                     </tbody>
                   </table>
                 </div>
+                {todaySortedRows.length > 0 && (
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-slate-800 px-3 py-2 text-xs text-slate-400">
+                    <div>
+                      Showing {(todayPage - 1) * todayPageSize + 1}-
+                      {Math.min(todayPage * todayPageSize, todaySortedRows.length)} of{" "}
+                      {todaySortedRows.length}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="history-today-page-size" className="text-slate-500">
+                        Rows
+                      </label>
+                      <select
+                        id="history-today-page-size"
+                        value={todayPageSize}
+                        onChange={(e) => setTodayPageSize(Number(e.target.value))}
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs"
+                      >
+                        {[25, 50, 100].map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => setTodayPage((p) => Math.max(1, p - 1))}
+                        disabled={todayPage <= 1}
+                        className="px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        Prev
+                      </button>
+                      <span className="tabular-nums text-slate-300 min-w-16 text-center">
+                        {todayPage}/{todayTotalPages}
+                      </span>
+                      <button
+                        onClick={() => setTodayPage((p) => Math.min(todayTotalPages, p + 1))}
+                        disabled={todayPage >= todayTotalPages}
+                        className="px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </section>
             </>
           )}
@@ -551,23 +746,47 @@ export function CopilotHistory({
               </section>
 
               <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-                <h2 className="text-sm uppercase tracking-widest text-slate-500 mb-2">
-                  Model performance
-                </h2>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h2 className="text-sm uppercase tracking-widest text-slate-500">
+                    Model performance
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setModelPerfSorting([...MODEL_PERF_DEFAULT_SORTING])}
+                    className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800"
+                  >
+                    Reset sort
+                  </button>
+                </div>
                 <div className="text-xs text-slate-500 mb-3">
                   Avg/P90 response duration and P50/P90 TTFT by model.
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm min-w-[780px]">
                     <thead className="text-slate-500 text-xs uppercase tracking-wider">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-normal">Model</th>
-                        <th className="text-right px-3 py-2 font-normal">Calls</th>
-                        <th className="text-right px-3 py-2 font-normal">Avg duration</th>
-                        <th className="text-right px-3 py-2 font-normal">P90 duration</th>
-                        <th className="text-right px-3 py-2 font-normal">P50 TTFT</th>
-                        <th className="text-right px-3 py-2 font-normal">P90 TTFT</th>
-                      </tr>
+                      {modelPerformanceTable.getHeaderGroups().map((headerGroup) => (
+                        <tr key={headerGroup.id}>
+                          {headerGroup.headers.map((header, idx) => (
+                            <th
+                              key={header.id}
+                              className={`${idx === 0 ? "text-left" : "text-right"} px-3 py-2 font-normal`}
+                            >
+                              <button
+                                type="button"
+                                onClick={header.column.getToggleSortingHandler()}
+                                className="inline-flex items-center gap-1 hover:text-slate-200"
+                              >
+                                <span>
+                                  {flexRender(header.column.columnDef.header, header.getContext())}
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  {sortIndicator(header.column.getIsSorted())}
+                                </span>
+                              </button>
+                            </th>
+                          ))}
+                        </tr>
+                      ))}
                     </thead>
                     <tbody>
                       {modelPerformance.length === 0 && (
@@ -577,7 +796,7 @@ export function CopilotHistory({
                           </td>
                         </tr>
                       )}
-                      {modelPerformance.map((m) => (
+                      {modelPerformanceTable.getRowModel().rows.map(({ original: m }) => (
                         <tr
                           key={m.model}
                           className="border-t border-slate-800/70 hover:bg-slate-800/40"
@@ -907,6 +1126,15 @@ export function CopilotHistory({
               <SkeletonChart />
               <SkeletonChart />
               <section className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+                <div className="flex items-center justify-end border-b border-slate-800 px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => setTrendsSorting([...TRENDS_DEFAULT_SORTING])}
+                    className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800"
+                  >
+                    Reset sort
+                  </button>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[760px] text-sm">
                     <tbody>
@@ -1001,25 +1229,39 @@ export function CopilotHistory({
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[760px] text-sm">
                     <thead className="text-slate-500 text-xs uppercase tracking-wider">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-normal">Bucket</th>
-                        <th className="text-right px-3 py-2 font-normal">Calls</th>
-                        <th className="text-right px-3 py-2 font-normal">Input</th>
-                        <th className="text-right px-3 py-2 font-normal">Cache R</th>
-                        <th className="text-right px-3 py-2 font-normal">Cache W</th>
-                        <th className="text-right px-3 py-2 font-normal">Output</th>
-                        <th className="text-right px-3 py-2 font-normal">Cost</th>
-                      </tr>
+                      {trendsTable.getHeaderGroups().map((headerGroup) => (
+                        <tr key={headerGroup.id}>
+                          {headerGroup.headers.map((header, idx) => (
+                            <th
+                              key={header.id}
+                              className={`${idx === 0 ? "text-left" : "text-right"} px-3 py-2 font-normal`}
+                            >
+                              <button
+                                type="button"
+                                onClick={header.column.getToggleSortingHandler()}
+                                className="inline-flex items-center gap-1 hover:text-slate-200"
+                              >
+                                <span>
+                                  {flexRender(header.column.columnDef.header, header.getContext())}
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  {sortIndicator(header.column.getIsSorted())}
+                                </span>
+                              </button>
+                            </th>
+                          ))}
+                        </tr>
+                      ))}
                     </thead>
                     <tbody>
-                      {data.length === 0 && (
+                      {trendsRows.length === 0 && (
                         <tr>
                           <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
                             No data in the selected interval.
                           </td>
                         </tr>
                       )}
-                      {[...data].reverse().map((r) => (
+                      {trendsPagedRows.map(({ original: r }) => (
                         <tr
                           key={r.bucket}
                           className="border-t border-slate-800/70 hover:bg-slate-800/40"
@@ -1046,6 +1288,49 @@ export function CopilotHistory({
                     </tbody>
                   </table>
                 </div>
+                {trendsSortedRows.length > 0 && (
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-slate-800 px-3 py-2 text-xs text-slate-400">
+                    <div>
+                      Showing {(trendsPage - 1) * trendsPageSize + 1}-
+                      {Math.min(trendsPage * trendsPageSize, trendsSortedRows.length)} of{" "}
+                      {trendsSortedRows.length}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="history-trends-page-size" className="text-slate-500">
+                        Rows
+                      </label>
+                      <select
+                        id="history-trends-page-size"
+                        value={trendsPageSize}
+                        onChange={(e) => setTrendsPageSize(Number(e.target.value))}
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs"
+                      >
+                        {[25, 50, 100].map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => setTrendsPage((p) => Math.max(1, p - 1))}
+                        disabled={trendsPage <= 1}
+                        className="px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        Prev
+                      </button>
+                      <span className="tabular-nums text-slate-300 min-w-16 text-center">
+                        {trendsPage}/{trendsTotalPages}
+                      </span>
+                      <button
+                        onClick={() => setTrendsPage((p) => Math.min(trendsTotalPages, p + 1))}
+                        disabled={trendsPage >= trendsTotalPages}
+                        className="px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </section>
             </>
           )}
