@@ -52,11 +52,27 @@ export function CopilotDashboard() {
   const [agents, setAgents] = useState<string[]>([]);
   const [summary, setSummary] = useState<CopilotSummary | null>(null);
   const [calls, setCalls] = useState<CopilotCall[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [hoverTooltip, setHoverTooltip] = useState<{
+    call: CopilotCall;
+    x: number;
+    y: number;
+  } | null>(null);
   const reloadTimer = useRef<number | null>(null);
   const requestSeq = useRef(0);
+
+  const placeTooltip = (clientX: number, clientY: number) => {
+    const pad = 12;
+    const width = 224;
+    const height = 128;
+    const x = Math.max(pad, Math.min(clientX + 14, window.innerWidth - width - pad));
+    const y = Math.max(pad, Math.min(clientY + 14, window.innerHeight - height - pad));
+    return { x, y };
+  };
 
   const reload = useCallback(
     async (showLoading = false) => {
@@ -112,10 +128,23 @@ export function CopilotDashboard() {
   const totalCalls = summary?.calls ?? 0;
 
   const visibleCalls = useMemo(() => calls, [calls]);
+  const totalPages = Math.max(1, Math.ceil(visibleCalls.length / pageSize));
+  const pagedCalls = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return visibleCalls.slice(start, start + pageSize);
+  }, [visibleCalls, page, pageSize]);
   const todaySpanHint = useMemo(() => {
     if (windowSel !== "today") return "";
     return fmtTodaySpan(Date.now());
   }, [windowSel, summary]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [windowSel, agent, pageSize]);
+
+  useEffect(() => {
+    setPage((p) => Math.min(Math.max(1, p), totalPages));
+  }, [totalPages]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -274,12 +303,24 @@ export function CopilotDashboard() {
                   </tr>
                 )}
                 {!loading &&
-                  visibleCalls.map((c) => (
+                  pagedCalls.map((c) => (
                     <tr
                       key={c.span_id}
                       className="border-t border-slate-800/70 hover:bg-slate-800/40 relative"
-                      onMouseEnter={() => setHoverId(c.span_id)}
-                      onMouseLeave={() => setHoverId(null)}
+                      onMouseEnter={(e) => {
+                        setHoverId(c.span_id);
+                        const { x, y } = placeTooltip(e.clientX, e.clientY);
+                        setHoverTooltip({ call: c, x, y });
+                      }}
+                      onMouseMove={(e) => {
+                        if (hoverId !== c.span_id) return;
+                        const { x, y } = placeTooltip(e.clientX, e.clientY);
+                        setHoverTooltip({ call: c, x, y });
+                      }}
+                      onMouseLeave={() => {
+                        setHoverId(null);
+                        setHoverTooltip(null);
+                      }}
                     >
                       <td className="px-3 py-2 text-slate-500 font-mono text-xs">
                         {fmtTime(c.start_ns)}
@@ -304,23 +345,71 @@ export function CopilotDashboard() {
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-amber-300 relative">
                         {fmtCost(c.total_cost)}
-                        {hoverId === c.span_id && (
-                          <div className="hidden md:block absolute right-2 top-full mt-1 z-10 rounded border border-slate-700 bg-slate-950 p-3 text-left font-mono text-xs space-y-0.5 w-56 shadow-xl">
-                            <div>Fresh input : {fmtCost(c.input_cost)}</div>
-                            <div>Cache read : {fmtCost(c.cache_read_cost)}</div>
-                            <div>Cache write : {fmtCost(c.cache_creation_cost)}</div>
-                            <div>Output : {fmtCost(c.output_cost)}</div>
-                            <div className="border-t border-slate-700 mt-1 pt-1">
-                              Total : {fmtCost(c.total_cost)}
-                            </div>
-                          </div>
-                        )}
                       </td>
                     </tr>
                   ))}
               </tbody>
             </table>
           </div>
+          {!loading && visibleCalls.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-slate-800 px-3 py-2 text-xs text-slate-400">
+              <div className="tabular-nums">
+                Showing {fmtInt((page - 1) * pageSize + 1)}-
+                {fmtInt(Math.min(page * pageSize, visibleCalls.length))} of{" "}
+                {fmtInt(visibleCalls.length)}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label htmlFor="live-page-size" className="text-slate-500">
+                  Rows
+                </label>
+                <select
+                  id="live-page-size"
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs"
+                >
+                  {[25, 50, 100].map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Prev
+                </button>
+                <span className="tabular-nums text-slate-300 min-w-20 text-center">
+                  Page {fmtInt(page)} / {fmtInt(totalPages)}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="px-2 py-1 rounded border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+          {hoverTooltip && (
+            <div
+              className="hidden md:block pointer-events-none fixed z-40 rounded border border-slate-700 bg-slate-950 p-3 text-left font-mono text-xs space-y-0.5 w-56 shadow-xl"
+              style={{ left: hoverTooltip.x, top: hoverTooltip.y }}
+            >
+              <div>Fresh input : {fmtCost(hoverTooltip.call.input_cost)}</div>
+              <div>Cache read : {fmtCost(hoverTooltip.call.cache_read_cost)}</div>
+              <div>Cache write : {fmtCost(hoverTooltip.call.cache_creation_cost)}</div>
+              <div>Output : {fmtCost(hoverTooltip.call.output_cost)}</div>
+              <div className="border-t border-slate-700 mt-1 pt-1">
+                Total : {fmtCost(hoverTooltip.call.total_cost)}
+              </div>
+            </div>
+          )}
           {loading && <Skeleton className="h-1 w-full" />}
         </section>
       </main>

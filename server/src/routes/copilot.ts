@@ -245,6 +245,7 @@ const SQL_OUTPUT_EXPR = `COALESCE(
 )`;
 
 const SQL_CACHE_READ_EXPR = `COALESCE(
+  CAST(json_extract(attributes, '$."gen_ai.usage.cache_read.input_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."gen_ai.usage.cache_read_input_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."gen_ai.usage.cached_input_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."llm.usage.cached_tokens"') AS REAL),
@@ -252,6 +253,7 @@ const SQL_CACHE_READ_EXPR = `COALESCE(
 )`;
 
 const SQL_CACHE_CREATE_EXPR = `COALESCE(
+  CAST(json_extract(attributes, '$."gen_ai.usage.cache_creation.input_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."gen_ai.usage.cache_creation_input_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."llm.usage.cache_creation_tokens"') AS REAL),
   0
