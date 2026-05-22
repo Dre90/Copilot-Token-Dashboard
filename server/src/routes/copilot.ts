@@ -163,6 +163,17 @@ export type Call = {
   total_cost: number;
 };
 
+type ModelAggregate = {
+  model: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  total_cost: number;
+  credits: number;
+};
+
 export function rowToCall(row: any): Call {
   let attrs: Attrs = {};
   try {
@@ -321,6 +332,74 @@ function fetchCalls(fromNs: string, toNs: string, agent?: string, limit = 500): 
       total_cost: input_cost + output_cost + cache_read_cost + cache_creation_cost,
     };
   });
+}
+
+function fetchModelLeaderboard(fromNs: string, toNs: string, limit = 25): ModelAggregate[] {
+  const rows = db
+    .prepare(
+      `SELECT
+         COALESCE(${SQL_MODEL_EXPR}, '') AS model,
+         COUNT(*) AS calls,
+         SUM(${SQL_INPUT_EXPR}) AS input_tokens,
+         SUM(${SQL_OUTPUT_EXPR}) AS output_tokens,
+         SUM(${SQL_CACHE_READ_EXPR}) AS cache_read_tokens,
+         SUM(${SQL_CACHE_CREATE_EXPR}) AS cache_creation_tokens
+       FROM spans
+       WHERE start_ns BETWEEN ? AND ?
+         AND ${SQL_LLM_WHERE}
+         AND COALESCE(${SQL_MODEL_EXPR}, '') <> ''
+       GROUP BY model`,
+    )
+    .all(fromNs, toNs) as Array<{
+    model: string;
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_tokens: number;
+    cache_creation_tokens: number;
+  }>;
+
+  const byModel = new Map<string, ModelAggregate>();
+
+  for (const row of rows) {
+    const p = priceFor(row.model);
+    const entry = byModel.get(row.model) ?? {
+      model: row.model,
+      calls: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_read_tokens: 0,
+      cache_creation_tokens: 0,
+      total_cost: 0,
+      credits: 0,
+    };
+
+    const calls = num(row.calls);
+    const input = num(row.input_tokens);
+    const output = num(row.output_tokens);
+    const cacheRead = num(row.cache_read_tokens);
+    const cacheWrite = num(row.cache_creation_tokens);
+
+    entry.calls += calls;
+    entry.input_tokens += input;
+    entry.output_tokens += output;
+    entry.cache_read_tokens += cacheRead;
+    entry.cache_creation_tokens += cacheWrite;
+    entry.total_cost +=
+      (input / 1_000_000) * p.input +
+      (output / 1_000_000) * p.output +
+      (cacheRead / 1_000_000) * p.cache_read +
+      (cacheWrite / 1_000_000) * p.cache_creation;
+    byModel.set(row.model, entry);
+  }
+
+  return Array.from(byModel.values())
+    .map((row) => ({
+      ...row,
+      credits: row.total_cost * 100,
+    }))
+    .sort((a, b) => b.total_cost - a.total_cost)
+    .slice(0, Math.max(1, Math.min(limit, 100)));
 }
 
 export function timeRange(q: { from?: string; to?: string; window?: string }): {
@@ -501,6 +580,33 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
       )
       .all() as Array<{ agent: string }>;
     return rows.map((r) => r.agent).filter(Boolean);
+  });
+
+  app.get("/api/copilot/leaderboard", async (req) => {
+    const q = req.query as {
+      from?: string;
+      to?: string;
+      window?: string;
+      limit?: string;
+    };
+
+    const now = Date.now();
+    const monthStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), 1).getTime();
+    const { fromNs, toNs } =
+      q.window === "mtd"
+        ? {
+            fromNs: (BigInt(monthStart) * 1_000_000n).toString(),
+            toNs: (BigInt(now) * 1_000_000n).toString(),
+          }
+        : timeRange({ from: q.from, to: q.to, window: q.window ?? "7d" });
+
+    const limit = Math.min(parseInt(q.limit ?? "25", 10) || 25, 100);
+    return {
+      window: q.window === "mtd" ? "mtd" : (q.window ?? "7d"),
+      from_ns: fromNs,
+      to_ns: toNs,
+      rows: fetchModelLeaderboard(fromNs, toNs, limit),
+    };
   });
 
   app.get("/api/copilot/timeseries", async (req) => {

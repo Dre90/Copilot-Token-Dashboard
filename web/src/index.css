@@ -141,3 +141,71 @@ html[data-theme="light"] .text-pink-300,
 html[data-theme="light"] .text-pink-400 {
   color: #be185d !important;
 }
+
+html[data-theme="light"] [data-export-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="light"] [data-export-theme="dark"].bg-slate-950,
+html[data-theme="light"] [data-export-theme="dark"] .bg-slate-950 {
+  background-color: #020617 !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .bg-slate-950\/50 {
+  background-color: rgba(2, 6, 23, 0.5) !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .bg-slate-900\/40 {
+  background-color: rgba(15, 23, 42, 0.4) !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .border-slate-800,
+html[data-theme="light"] [data-export-theme="dark"] .border-slate-800\/70,
+html[data-theme="light"] [data-export-theme="dark"] .border-slate-700 {
+  border-color: #1e293b !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"].text-slate-100,
+html[data-theme="light"] [data-export-theme="dark"] .text-slate-100 {
+  color: #f1f5f9 !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .text-slate-200 {
+  color: #e2e8f0 !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .text-slate-500 {
+  color: #64748b !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .text-amber-200 {
+  color: #fde68a !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .text-amber-300 {
+  color: #fcd34d !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .text-sky-300 {
+  color: #7dd3fc !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .text-cyan-300 {
+  color: #67e8f9 !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .text-emerald-300 {
+  color: #6ee7b7 !important;
+}
+
+html[data-theme="light"] [data-export-theme="dark"] .text-rose-300 {
+  color: #fda4af !important;
+}

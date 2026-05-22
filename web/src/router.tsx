@@ -9,7 +9,12 @@ import {
   redirect,
   useNavigate,
 } from "@tanstack/react-router";
-import { CopilotDashboard, CopilotHelp, CopilotHistory } from "./features/copilot/components";
+import {
+  CopilotDashboard,
+  CopilotHelp,
+  CopilotHistory,
+  TeamComparePage,
+} from "./features/copilot/components";
 import {
   loadHistoryAgents,
   loadHistoryDetailsPrefetch,
@@ -92,6 +97,14 @@ function AppShell() {
             activeProps={{ className: navClass(true) }}
           >
             History
+          </Link>
+          <Link
+            to="/team-compare"
+            preload="render"
+            className={navClass(false)}
+            activeProps={{ className: navClass(true) }}
+          >
+            Team
           </Link>
           <Link to="/help" className={navClass(false)} activeProps={{ className: navClass(true) }}>
             Help
@@ -196,12 +209,21 @@ const helpRoute = createRoute({
   component: CopilotHelp,
 });
 
+const teamCompareRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/team-compare",
+  staleTime: 2 * 60_000,
+  gcTime: 10 * 60_000,
+  component: TeamComparePage,
+});
+
 const routeTree = rootRoute.addChildren([
   liveRoute,
   historyRedirectRoute,
   historyTodayRoute,
   historyTrendsRoute,
   historyInsightsRoute,
+  teamCompareRoute,
   helpRoute,
 ]);
 

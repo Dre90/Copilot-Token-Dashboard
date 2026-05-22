@@ -50,6 +50,24 @@ export type CopilotBucket = {
   cost: number;
 };
 
+export type CopilotLeaderboardRow = {
+  model: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  total_cost: number;
+  credits: number;
+};
+
+export type CopilotLeaderboardResponse = {
+  window: string;
+  from_ns: string;
+  to_ns: string;
+  rows: CopilotLeaderboardRow[];
+};
+
 export const copilotApi = {
   summary: (window = "24h", agent = "all") =>
     get<CopilotSummary>(`/api/copilot/summary?window=${window}&agent=${encodeURIComponent(agent)}`),
@@ -62,6 +80,14 @@ export const copilotApi = {
     const qs = new URLSearchParams({ bucket, agent });
     if (window) qs.set("window", window);
     return get<CopilotBucket[]>(`/api/copilot/timeseries?${qs}`);
+  },
+  leaderboard: (window: "7d" | "mtd", limit = 25) =>
+    get<CopilotLeaderboardResponse>(
+      `/api/copilot/leaderboard?window=${window}&limit=${Math.max(1, Math.min(limit, 100))}`,
+    ),
+  leaderboardRange: (from: string, to: string, limit = 25) => {
+    const qs = new URLSearchParams({ from, to, limit: String(Math.max(1, Math.min(limit, 100))) });
+    return get<CopilotLeaderboardResponse>(`/api/copilot/leaderboard?${qs.toString()}`);
   },
   clear: async () => {
     const res = await fetch("/api/copilot/clear", { method: "DELETE" });
