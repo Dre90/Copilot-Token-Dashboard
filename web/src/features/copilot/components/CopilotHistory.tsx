@@ -314,7 +314,7 @@ export function CopilotHistory({
                   {anomalyData.rows.map(({ call, reason }) => (
                     <li
                       key={call.span_id}
-                      className="p-3 text-sm grid grid-cols-[90px_1fr_auto] gap-3 items-baseline"
+                      className="p-3 text-sm grid grid-cols-1 sm:grid-cols-[90px_1fr_auto] gap-2 sm:gap-3 items-baseline"
                     >
                       <span className="text-slate-500 font-mono text-xs">
                         {fmtTime(call.start_ns)}
@@ -334,57 +334,59 @@ export function CopilotHistory({
                 <div className="px-3 py-2 border-b border-slate-800 text-sm uppercase tracking-widest text-slate-500">
                   Today's timeline
                 </div>
-                <table className="w-full text-sm">
-                  <thead className="text-slate-500 text-xs uppercase tracking-wider">
-                    <tr>
-                      <th className="text-left px-3 py-2 font-normal">Time</th>
-                      <th className="text-left px-3 py-2 font-normal">Model</th>
-                      <th className="text-left px-3 py-2 font-normal">Agent</th>
-                      <th className="text-right px-3 py-2 font-normal">Tokens</th>
-                      <th className="text-right px-3 py-2 font-normal">Latency</th>
-                      <th className="text-right px-3 py-2 font-normal">Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {todayCalls.length === 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-sm">
+                    <thead className="text-slate-500 text-xs uppercase tracking-wider">
                       <tr>
-                        <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
-                          No calls recorded today.
-                        </td>
+                        <th className="text-left px-3 py-2 font-normal">Time</th>
+                        <th className="text-left px-3 py-2 font-normal">Model</th>
+                        <th className="text-left px-3 py-2 font-normal">Agent</th>
+                        <th className="text-right px-3 py-2 font-normal">Tokens</th>
+                        <th className="text-right px-3 py-2 font-normal">Latency</th>
+                        <th className="text-right px-3 py-2 font-normal">Cost</th>
                       </tr>
-                    )}
-                    {todayCalls.slice(0, 120).map((c) => (
-                      <tr
-                        key={c.span_id}
-                        className="border-t border-slate-800/70 hover:bg-slate-800/40"
-                      >
-                        <td className="px-3 py-2 font-mono text-xs text-slate-500">
-                          {fmtTime(c.start_ns)}
-                        </td>
-                        <td className="px-3 py-2 text-amber-200 font-mono text-xs truncate max-w-[220px]">
-                          {c.model || "—"}
-                        </td>
-                        <td className="px-3 py-2 text-slate-300 truncate max-w-[180px]">
-                          {c.agent || "—"}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-sky-300">
-                          {fmtInt(
-                            c.input_tokens +
-                              c.cache_read_tokens +
-                              c.cache_creation_tokens +
-                              c.output_tokens,
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-emerald-300">
-                          {fmtMs(c.duration_ms)}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-amber-300">
-                          {fmtCost(c.total_cost)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {todayCalls.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
+                            No calls recorded today.
+                          </td>
+                        </tr>
+                      )}
+                      {todayCalls.slice(0, 120).map((c) => (
+                        <tr
+                          key={c.span_id}
+                          className="border-t border-slate-800/70 hover:bg-slate-800/40"
+                        >
+                          <td className="px-3 py-2 font-mono text-xs text-slate-500">
+                            {fmtTime(c.start_ns)}
+                          </td>
+                          <td className="px-3 py-2 text-amber-200 font-mono text-xs truncate max-w-[220px]">
+                            {c.model || "—"}
+                          </td>
+                          <td className="px-3 py-2 text-slate-300 truncate max-w-[180px]">
+                            {c.agent || "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-sky-300">
+                            {fmtInt(
+                              c.input_tokens +
+                                c.cache_read_tokens +
+                                c.cache_creation_tokens +
+                                c.output_tokens,
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-emerald-300">
+                            {fmtMs(c.duration_ms)}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-amber-300">
+                            {fmtCost(c.total_cost)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </section>
             </>
           )}
@@ -845,11 +847,13 @@ export function CopilotHistory({
               <SkeletonChart />
               <SkeletonChart />
               <section className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-                <table className="w-full text-sm">
-                  <tbody>
-                    <SkeletonTableRows rows={8} cols={7} />
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-sm">
+                    <tbody>
+                      <SkeletonTableRows rows={8} cols={7} />
+                    </tbody>
+                  </table>
+                </div>
               </section>
             </>
           ) : (
@@ -934,52 +938,54 @@ export function CopilotHistory({
               </section>
 
               <section className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="text-slate-500 text-xs uppercase tracking-wider">
-                    <tr>
-                      <th className="text-left px-3 py-2 font-normal">Bucket</th>
-                      <th className="text-right px-3 py-2 font-normal">Calls</th>
-                      <th className="text-right px-3 py-2 font-normal">Input</th>
-                      <th className="text-right px-3 py-2 font-normal">Cache R</th>
-                      <th className="text-right px-3 py-2 font-normal">Cache W</th>
-                      <th className="text-right px-3 py-2 font-normal">Output</th>
-                      <th className="text-right px-3 py-2 font-normal">Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.length === 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-sm">
+                    <thead className="text-slate-500 text-xs uppercase tracking-wider">
                       <tr>
-                        <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
-                          No data in the selected interval.
-                        </td>
+                        <th className="text-left px-3 py-2 font-normal">Bucket</th>
+                        <th className="text-right px-3 py-2 font-normal">Calls</th>
+                        <th className="text-right px-3 py-2 font-normal">Input</th>
+                        <th className="text-right px-3 py-2 font-normal">Cache R</th>
+                        <th className="text-right px-3 py-2 font-normal">Cache W</th>
+                        <th className="text-right px-3 py-2 font-normal">Output</th>
+                        <th className="text-right px-3 py-2 font-normal">Cost</th>
                       </tr>
-                    )}
-                    {[...data].reverse().map((r) => (
-                      <tr
-                        key={r.bucket}
-                        className="border-t border-slate-800/70 hover:bg-slate-800/40"
-                      >
-                        <td className="px-3 py-2 font-mono text-xs text-slate-300">{r.bucket}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{r.calls}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-sky-400">
-                          {fmtInt(r.input_tokens)}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-cyan-400">
-                          {fmtInt(r.cache_read_tokens)}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-pink-400">
-                          {fmtInt(r.cache_creation_tokens)}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-emerald-400">
-                          {fmtInt(r.output_tokens)}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-amber-300">
-                          {fmtCost(r.cost)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {data.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                            No data in the selected interval.
+                          </td>
+                        </tr>
+                      )}
+                      {[...data].reverse().map((r) => (
+                        <tr
+                          key={r.bucket}
+                          className="border-t border-slate-800/70 hover:bg-slate-800/40"
+                        >
+                          <td className="px-3 py-2 font-mono text-xs text-slate-300">{r.bucket}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{r.calls}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-sky-400">
+                            {fmtInt(r.input_tokens)}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-cyan-400">
+                            {fmtInt(r.cache_read_tokens)}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-pink-400">
+                            {fmtInt(r.cache_creation_tokens)}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-emerald-400">
+                            {fmtInt(r.output_tokens)}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-amber-300">
+                            {fmtCost(r.cost)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </section>
             </>
           )}

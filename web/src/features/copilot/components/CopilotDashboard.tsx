@@ -120,14 +120,14 @@ export function CopilotDashboard() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <h1 className="text-base font-semibold tracking-tight">Copilot Token Dashboard</h1>
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm w-full md:w-auto">
             <span className="text-slate-400">Agent</span>
             <select
               value={agent}
               onChange={(e) => setAgent(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm min-w-[140px]"
+              className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm min-w-0 w-full sm:w-[220px] md:w-auto md:min-w-[140px]"
               disabled={loading}
             >
               <option value="all">All agents</option>
@@ -141,7 +141,7 @@ export function CopilotDashboard() {
             <select
               value={windowSel}
               onChange={(e) => setWindowSel(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm"
+              className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm w-full sm:w-auto"
               disabled={loading}
             >
               {WINDOWS.map((w) => (
@@ -152,7 +152,9 @@ export function CopilotDashboard() {
             </select>
 
             {todaySpanHint && (
-              <span className="text-xs text-slate-500 tabular-nums">{todaySpanHint}</span>
+              <span className="hidden sm:inline text-xs text-slate-500 tabular-nums">
+                {todaySpanHint}
+              </span>
             )}
 
             <LoadingStatus loading={loading} />
@@ -164,14 +166,14 @@ export function CopilotDashboard() {
 
             <button
               onClick={onReset}
-              className="px-2 py-1 rounded border border-slate-700 hover:bg-slate-800 text-slate-300"
+              className="px-2 py-1 rounded border border-slate-700 hover:bg-slate-800 text-slate-300 whitespace-nowrap"
               disabled={loading}
             >
               Reset
             </button>
             <button
               onClick={onClearAll}
-              className="px-2 py-1 rounded border border-rose-700 text-rose-300 hover:bg-rose-900/40"
+              className="px-2 py-1 rounded border border-rose-700 text-rose-300 hover:bg-rose-900/40 whitespace-nowrap"
               disabled={loading}
             >
               Clear All
@@ -180,7 +182,7 @@ export function CopilotDashboard() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+      <main className="max-w-6xl mx-auto px-3 sm:px-6 py-6 space-y-6">
         <section className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {loading ? (
             <>
@@ -237,83 +239,88 @@ export function CopilotDashboard() {
         </section>
 
         <section className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-visible">
-          <table className="w-full text-sm">
-            <thead className="text-slate-500 text-xs uppercase tracking-wider">
-              <tr>
-                <th className="text-left px-3 py-2 font-normal">Time</th>
-                <th className="text-left px-3 py-2 font-normal">Model</th>
-                <th className="text-left px-3 py-2 font-normal">Agent</th>
-                <th className="text-right px-3 py-2 font-normal">Input</th>
-                <th className="text-right px-3 py-2 font-normal">Cache Read</th>
-                <th className="text-right px-3 py-2 font-normal">Cache Write</th>
-                <th className="text-right px-3 py-2 font-normal">Output</th>
-                <th className="text-right px-3 py-2 font-normal">Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && <SkeletonTableRows rows={8} cols={8} />}
-              {!loading && visibleCalls.length === 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] text-sm">
+              <thead className="text-slate-500 text-xs uppercase tracking-wider">
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-slate-500">
-                    <div className="space-y-3">
-                      <div>No LLM calls recorded yet. Use Copilot Chat to generate data.</div>
-                      {summary && !summary.has_any_telemetry && (
-                        <div className="mx-auto max-w-2xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left text-sm text-amber-100">
-                          If you expect telemetry here and nothing appears, enable OTel in VS Code:
-                          <div className="mt-2 font-mono text-xs text-amber-200">
-                            "github.copilot.chat.otel.enabled": true
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </td>
+                  <th className="text-left px-3 py-2 font-normal">Time</th>
+                  <th className="text-left px-3 py-2 font-normal">Model</th>
+                  <th className="text-left px-3 py-2 font-normal">Agent</th>
+                  <th className="text-right px-3 py-2 font-normal">Input</th>
+                  <th className="text-right px-3 py-2 font-normal">Cache Read</th>
+                  <th className="text-right px-3 py-2 font-normal">Cache Write</th>
+                  <th className="text-right px-3 py-2 font-normal">Output</th>
+                  <th className="text-right px-3 py-2 font-normal">Cost</th>
                 </tr>
-              )}
-              {!loading &&
-                visibleCalls.map((c) => (
-                  <tr
-                    key={c.span_id}
-                    className="border-t border-slate-800/70 hover:bg-slate-800/40 relative"
-                    onMouseEnter={() => setHoverId(c.span_id)}
-                    onMouseLeave={() => setHoverId(null)}
-                  >
-                    <td className="px-3 py-2 text-slate-500 font-mono text-xs">
-                      {fmtTime(c.start_ns)}
-                    </td>
-                    <td className="px-3 py-2 text-amber-200 font-mono text-xs">{c.model || "—"}</td>
-                    <td className="px-3 py-2 text-slate-300 truncate max-w-[180px]">
-                      {c.agent || "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-sky-400">
-                      ↓ {fmtInt(c.input_tokens)}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-cyan-400">
-                      {c.cache_read_tokens ? `↻ ${fmtInt(c.cache_read_tokens)}` : "·"}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-pink-400">
-                      {c.cache_creation_tokens ? `+ ${fmtInt(c.cache_creation_tokens)}` : "·"}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-emerald-400">
-                      ↑ {fmtInt(c.output_tokens)}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-amber-300 relative">
-                      {fmtCost(c.total_cost)}
-                      {hoverId === c.span_id && (
-                        <div className="absolute right-2 top-full mt-1 z-10 rounded border border-slate-700 bg-slate-950 p-3 text-left font-mono text-xs space-y-0.5 w-56 shadow-xl">
-                          <div>Fresh input : {fmtCost(c.input_cost)}</div>
-                          <div>Cache read : {fmtCost(c.cache_read_cost)}</div>
-                          <div>Cache write : {fmtCost(c.cache_creation_cost)}</div>
-                          <div>Output : {fmtCost(c.output_cost)}</div>
-                          <div className="border-t border-slate-700 mt-1 pt-1">
-                            Total : {fmtCost(c.total_cost)}
+              </thead>
+              <tbody>
+                {loading && <SkeletonTableRows rows={8} cols={8} />}
+                {!loading && visibleCalls.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-8 text-center text-slate-500">
+                      <div className="space-y-3">
+                        <div>No LLM calls recorded yet. Use Copilot Chat to generate data.</div>
+                        {summary && !summary.has_any_telemetry && (
+                          <div className="mx-auto max-w-2xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-left text-sm text-amber-100">
+                            If you expect telemetry here and nothing appears, enable OTel in VS
+                            Code:
+                            <div className="mt-2 font-mono text-xs text-amber-200">
+                              "github.copilot.chat.otel.enabled": true
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </td>
                   </tr>
-                ))}
-            </tbody>
-          </table>
+                )}
+                {!loading &&
+                  visibleCalls.map((c) => (
+                    <tr
+                      key={c.span_id}
+                      className="border-t border-slate-800/70 hover:bg-slate-800/40 relative"
+                      onMouseEnter={() => setHoverId(c.span_id)}
+                      onMouseLeave={() => setHoverId(null)}
+                    >
+                      <td className="px-3 py-2 text-slate-500 font-mono text-xs">
+                        {fmtTime(c.start_ns)}
+                      </td>
+                      <td className="px-3 py-2 text-amber-200 font-mono text-xs">
+                        {c.model || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-slate-300 truncate max-w-[180px]">
+                        {c.agent || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-sky-400">
+                        ↓ {fmtInt(c.input_tokens)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-cyan-400">
+                        {c.cache_read_tokens ? `↻ ${fmtInt(c.cache_read_tokens)}` : "·"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-pink-400">
+                        {c.cache_creation_tokens ? `+ ${fmtInt(c.cache_creation_tokens)}` : "·"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-emerald-400">
+                        ↑ {fmtInt(c.output_tokens)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-amber-300 relative">
+                        {fmtCost(c.total_cost)}
+                        {hoverId === c.span_id && (
+                          <div className="hidden md:block absolute right-2 top-full mt-1 z-10 rounded border border-slate-700 bg-slate-950 p-3 text-left font-mono text-xs space-y-0.5 w-56 shadow-xl">
+                            <div>Fresh input : {fmtCost(c.input_cost)}</div>
+                            <div>Cache read : {fmtCost(c.cache_read_cost)}</div>
+                            <div>Cache write : {fmtCost(c.cache_creation_cost)}</div>
+                            <div>Output : {fmtCost(c.output_cost)}</div>
+                            <div className="border-t border-slate-700 mt-1 pt-1">
+                              Total : {fmtCost(c.total_cost)}
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
           {loading && <Skeleton className="h-1 w-full" />}
         </section>
       </main>
