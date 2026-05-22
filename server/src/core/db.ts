@@ -23,6 +23,8 @@ db.exec(`
     attributes     TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_spans_start ON spans(start_ns);
+  CREATE INDEX IF NOT EXISTS idx_spans_start_name ON spans(start_ns, name);
+  CREATE INDEX IF NOT EXISTS idx_spans_chat_start ON spans(start_ns) WHERE name = 'chat';
   CREATE INDEX IF NOT EXISTS idx_spans_name  ON spans(name);
   CREATE INDEX IF NOT EXISTS idx_spans_trace ON spans(trace_id);
 

@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { api, type Span } from "../../../api/client";
 import { copilotApi, type CopilotBucket, type CopilotCall } from "../../../api/copilot";
+import type { HistoryPrefetchedData } from "../lib/historyRouteLoader";
 import {
   buildCacheImpact,
   buildForecast,
@@ -76,25 +77,63 @@ export function CopilotHistory({
   agent,
   agents,
   onAgentChange,
+  view,
+  onViewChange,
+  initialBucket,
+  onBucketChange,
+  prefetched,
 }: {
   agent: string;
   agents: string[];
   onAgentChange: (a: string) => void;
+  view: HistoryView;
+  onViewChange: (next: HistoryView) => void;
+  initialBucket?: HistoryBucket;
+  onBucketChange?: (next: HistoryBucket) => void;
+  prefetched?: HistoryPrefetchedData;
 }) {
-  const [view, setView] = useState<HistoryView>("today");
-  const [bucket, setBucket] = useState<HistoryBucket>("day");
-  const [data, setData] = useState<CopilotBucket[]>([]);
-  const [todayCalls, setTodayCalls] = useState<CopilotCall[]>([]);
-  const [baselineCalls, setBaselineCalls] = useState<CopilotCall[]>([]);
-  const [analysisCalls, setAnalysisCalls] = useState<CopilotCall[]>([]);
-  const [analysisSpans, setAnalysisSpans] = useState<Span[]>([]);
-  const [dailyCost, setDailyCost] = useState<CopilotBucket[]>([]);
-  const [trendsLoading, setTrendsLoading] = useState(true);
-  const [detailsLoading, setDetailsLoading] = useState(true);
+  const [bucket, setBucket] = useState<HistoryBucket>(initialBucket ?? "day");
+  const hasPrefetchedTrends = prefetched?.trendsDay !== undefined;
+  const hasPrefetchedDetails =
+    prefetched?.todayCalls !== undefined &&
+    prefetched?.baselineCalls !== undefined &&
+    prefetched?.analysisCalls !== undefined &&
+    prefetched?.dailyCost !== undefined &&
+    prefetched?.analysisSpans !== undefined;
+  const [data, setData] = useState<CopilotBucket[]>(() => prefetched?.trendsDay ?? []);
+  const [todayCalls, setTodayCalls] = useState<CopilotCall[]>(() => prefetched?.todayCalls ?? []);
+  const [baselineCalls, setBaselineCalls] = useState<CopilotCall[]>(
+    () => prefetched?.baselineCalls ?? [],
+  );
+  const [analysisCalls, setAnalysisCalls] = useState<CopilotCall[]>(
+    () => prefetched?.analysisCalls ?? [],
+  );
+  const [analysisSpans, setAnalysisSpans] = useState<Span[]>(() => prefetched?.analysisSpans ?? []);
+  const [dailyCost, setDailyCost] = useState<CopilotBucket[]>(() => prefetched?.dailyCost ?? []);
+  const [trendsLoading, setTrendsLoading] = useState(
+    () => view === "trends" && !hasPrefetchedTrends,
+  );
+  const [detailsLoading, setDetailsLoading] = useState(
+    () => view !== "trends" && !hasPrefetchedDetails,
+  );
   const trendsRequestSeq = useRef(0);
   const detailsRequestSeq = useRef(0);
+  const skipInitialTrendsFetch = useRef(hasPrefetchedTrends);
+  const skipInitialDetailsFetch = useRef(hasPrefetchedDetails);
 
   useEffect(() => {
+    if (view !== "trends") {
+      setTrendsLoading(false);
+      return;
+    }
+
+    if (skipInitialTrendsFetch.current && bucket === "day") {
+      skipInitialTrendsFetch.current = false;
+      setTrendsLoading(false);
+      return;
+    }
+    skipInitialTrendsFetch.current = false;
+
     const seq = ++trendsRequestSeq.current;
     setTrendsLoading(true);
     setData([]);
@@ -111,9 +150,21 @@ export function CopilotHistory({
       .finally(() => {
         if (seq === trendsRequestSeq.current) setTrendsLoading(false);
       });
-  }, [bucket, agent]);
+  }, [bucket, agent, view]);
 
   useEffect(() => {
+    if (view === "trends") {
+      setDetailsLoading(false);
+      return;
+    }
+
+    if (skipInitialDetailsFetch.current) {
+      skipInitialDetailsFetch.current = false;
+      setDetailsLoading(false);
+      return;
+    }
+    skipInitialDetailsFetch.current = false;
+
     const seq = ++detailsRequestSeq.current;
     setDetailsLoading(true);
     setTodayCalls([]);
@@ -151,7 +202,7 @@ export function CopilotHistory({
       .finally(() => {
         if (seq === detailsRequestSeq.current) setDetailsLoading(false);
       });
-  }, [agent]);
+  }, [agent, view]);
 
   const totals = data.reduce(
     (a, b) => ({
@@ -218,6 +269,15 @@ export function CopilotHistory({
     return `rgba(56, 189, 248, ${0.2 + intensity * 0.75})`;
   };
 
+  useEffect(() => {
+    setBucket(initialBucket ?? "day");
+  }, [initialBucket]);
+
+  const handleBucketChange = (next: HistoryBucket) => {
+    setBucket(next);
+    onBucketChange?.(next);
+  };
+
   return (
     <div className="space-y-6">
       <CopilotHistoryToolbar
@@ -225,9 +285,9 @@ export function CopilotHistory({
         agents={agents}
         onAgentChange={onAgentChange}
         view={view}
-        onViewChange={setView}
+        onViewChange={onViewChange}
         bucket={bucket}
-        onBucketChange={setBucket}
+        onBucketChange={handleBucketChange}
         bucketOptions={BUCKETS}
         controlsDisabled={detailsLoading || trendsLoading}
         bucketDisabled={trendsLoading}

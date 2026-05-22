@@ -215,31 +215,110 @@ export function rowToCall(row: any): Call {
   };
 }
 
-const SPAN_COLS = `
-  span_id, trace_id, parent_span_id, name, kind,
-  CAST(start_ns AS TEXT) AS start_ns,
-  CAST(end_ns AS TEXT) AS end_ns,
-  duration_ms, status_code, attributes
-`;
+const SQL_MODEL_EXPR = `COALESCE(
+  json_extract(attributes, '$."gen_ai.response.model"'),
+  json_extract(attributes, '$."gen_ai.request.model"'),
+  json_extract(attributes, '$."llm.model"'),
+  json_extract(attributes, '$."model"')
+)`;
+
+const SQL_AGENT_EXPR = `COALESCE(
+  json_extract(attributes, '$."copilot.chat.agent"'),
+  json_extract(attributes, '$."copilot.chat.command"'),
+  json_extract(attributes, '$."gen_ai.agent.name"'),
+  json_extract(attributes, '$."copilot.chat.location"'),
+  json_extract(attributes, '$."copilot.chat.intent"')
+)`;
+
+const SQL_INPUT_EXPR = `COALESCE(
+  CAST(json_extract(attributes, '$."gen_ai.usage.input_tokens"') AS REAL),
+  CAST(json_extract(attributes, '$."llm.usage.prompt_tokens"') AS REAL),
+  CAST(json_extract(attributes, '$."usage.prompt_tokens"') AS REAL),
+  0
+)`;
+
+const SQL_OUTPUT_EXPR = `COALESCE(
+  CAST(json_extract(attributes, '$."gen_ai.usage.output_tokens"') AS REAL),
+  CAST(json_extract(attributes, '$."llm.usage.completion_tokens"') AS REAL),
+  CAST(json_extract(attributes, '$."usage.completion_tokens"') AS REAL),
+  0
+)`;
+
+const SQL_CACHE_READ_EXPR = `COALESCE(
+  CAST(json_extract(attributes, '$."gen_ai.usage.cache_read_input_tokens"') AS REAL),
+  CAST(json_extract(attributes, '$."gen_ai.usage.cached_input_tokens"') AS REAL),
+  CAST(json_extract(attributes, '$."llm.usage.cached_tokens"') AS REAL),
+  0
+)`;
+
+const SQL_CACHE_CREATE_EXPR = `COALESCE(
+  CAST(json_extract(attributes, '$."gen_ai.usage.cache_creation_input_tokens"') AS REAL),
+  CAST(json_extract(attributes, '$."llm.usage.cache_creation_tokens"') AS REAL),
+  0
+)`;
+
+const SQL_LLM_WHERE = `(name = 'chat' OR attributes LIKE '%gen_ai.usage%' OR attributes LIKE '%llm.usage%')`;
 
 // We treat any LLM span as a "call". Copilot's chat span is named 'chat',
 // but be liberal and match any span that has gen_ai usage attributes.
 function fetchCalls(fromNs: string, toNs: string, agent?: string, limit = 500): Call[] {
   const rows = db
     .prepare(
-      `SELECT ${SPAN_COLS} FROM spans
+      `SELECT
+         span_id,
+         trace_id,
+         CAST(start_ns AS TEXT) AS start_ns,
+         duration_ms,
+         COALESCE(${SQL_MODEL_EXPR}, '') AS model,
+         COALESCE(${SQL_AGENT_EXPR}, '') AS agent,
+         CAST(${SQL_INPUT_EXPR} AS INTEGER) AS input_tokens,
+         CAST(${SQL_OUTPUT_EXPR} AS INTEGER) AS output_tokens,
+         CAST(${SQL_CACHE_READ_EXPR} AS INTEGER) AS cache_read_tokens,
+         CAST(${SQL_CACHE_CREATE_EXPR} AS INTEGER) AS cache_creation_tokens
+       FROM spans
        WHERE start_ns BETWEEN ? AND ?
-         AND (name = 'chat' OR attributes LIKE '%gen_ai.usage%' OR attributes LIKE '%llm.usage%')
+         AND ${SQL_LLM_WHERE}
+         AND (? IS NULL OR ? = 'all' OR COALESCE(${SQL_AGENT_EXPR}, '') = ?)
        ORDER BY start_ns DESC
        LIMIT ?`,
     )
-    .all(fromNs, toNs, limit) as any[];
+    .all(fromNs, toNs, agent ?? null, agent ?? null, agent ?? null, limit) as Array<{
+    span_id: string;
+    trace_id: string;
+    start_ns: string;
+    duration_ms: number;
+    model: string;
+    agent: string;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_tokens: number;
+    cache_creation_tokens: number;
+  }>;
 
-  const calls = rows.map(rowToCall);
-  if (agent && agent !== "all") {
-    return calls.filter((c) => c.agent === agent);
-  }
-  return calls;
+  return rows.map((row) => {
+    const p = priceFor(row.model);
+    const input_cost = (row.input_tokens / 1_000_000) * p.input;
+    const output_cost = (row.output_tokens / 1_000_000) * p.output;
+    const cache_read_cost = (row.cache_read_tokens / 1_000_000) * p.cache_read;
+    const cache_creation_cost = (row.cache_creation_tokens / 1_000_000) * p.cache_creation;
+    return {
+      span_id: row.span_id,
+      trace_id: row.trace_id,
+      start_ns: row.start_ns,
+      duration_ms: row.duration_ms,
+      model: row.model,
+      agent: row.agent,
+      input_tokens: row.input_tokens,
+      output_tokens: row.output_tokens,
+      cache_read_tokens: row.cache_read_tokens,
+      cache_creation_tokens: row.cache_creation_tokens,
+      input_cost,
+      output_cost,
+      cache_read_cost,
+      cache_creation_cost,
+      total_cost: input_cost + output_cost + cache_read_cost + cache_creation_cost,
+    };
+  });
 }
 
 export function timeRange(q: { from?: string; to?: string; window?: string }): {
@@ -327,25 +406,54 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
       agent?: string;
     };
     const { fromNs, toNs } = timeRange(q);
-    const calls = fetchCalls(fromNs, toNs, q.agent, 5000);
+    const modelRows = db
+      .prepare(
+        `SELECT
+           COALESCE(${SQL_MODEL_EXPR}, '') AS model,
+           COUNT(*) AS calls,
+           SUM(${SQL_INPUT_EXPR}) AS input_tokens,
+           SUM(${SQL_OUTPUT_EXPR}) AS output_tokens,
+           SUM(${SQL_CACHE_READ_EXPR}) AS cache_read_tokens,
+           SUM(${SQL_CACHE_CREATE_EXPR}) AS cache_creation_tokens
+         FROM spans
+         WHERE start_ns BETWEEN ? AND ?
+           AND ${SQL_LLM_WHERE}
+           AND (? IS NULL OR ? = 'all' OR COALESCE(${SQL_AGENT_EXPR}, '') = ?)
+         GROUP BY model`,
+      )
+      .all(fromNs, toNs, q.agent ?? null, q.agent ?? null, q.agent ?? null) as Array<{
+      model: string;
+      calls: number;
+      input_tokens: number;
+      output_tokens: number;
+      cache_read_tokens: number;
+      cache_creation_tokens: number;
+    }>;
 
-    let input = 0,
-      output = 0,
-      cacheR = 0,
-      cacheC = 0;
-    let inputCost = 0,
-      outputCost = 0,
-      cacheRCost = 0,
-      cacheCCost = 0;
-    for (const c of calls) {
-      input += c.input_tokens;
-      output += c.output_tokens;
-      cacheR += c.cache_read_tokens;
-      cacheC += c.cache_creation_tokens;
-      inputCost += c.input_cost;
-      outputCost += c.output_cost;
-      cacheRCost += c.cache_read_cost;
-      cacheCCost += c.cache_creation_cost;
+    let calls = 0;
+    let input = 0;
+    let output = 0;
+    let cacheR = 0;
+    let cacheC = 0;
+    let inputCost = 0;
+    let outputCost = 0;
+    let cacheRCost = 0;
+    let cacheCCost = 0;
+    for (const row of modelRows) {
+      const p = priceFor(row.model);
+      const rowInput = num(row.input_tokens);
+      const rowOutput = num(row.output_tokens);
+      const rowCacheR = num(row.cache_read_tokens);
+      const rowCacheC = num(row.cache_creation_tokens);
+      calls += num(row.calls);
+      input += rowInput;
+      output += rowOutput;
+      cacheR += rowCacheR;
+      cacheC += rowCacheC;
+      inputCost += (rowInput / 1_000_000) * p.input;
+      outputCost += (rowOutput / 1_000_000) * p.output;
+      cacheRCost += (rowCacheR / 1_000_000) * p.cache_read;
+      cacheCCost += (rowCacheC / 1_000_000) * p.cache_creation;
     }
     const total_cost = inputCost + outputCost + cacheRCost + cacheCCost;
     const total_input_with_cache = input + cacheR + cacheC;
@@ -363,7 +471,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
       telemetryRows.has_events === 1;
 
     return {
-      calls: calls.length,
+      calls,
       input_fresh_tokens: input,
       input_total_tokens: total_input_with_cache,
       cache_read_tokens: cacheR,
@@ -382,29 +490,15 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
   app.get("/api/copilot/agents", async () => {
     const rows = db
       .prepare(
-        `SELECT attributes FROM spans
-       WHERE name = 'chat' OR attributes LIKE '%gen_ai.usage%'
-       ORDER BY start_ns DESC LIMIT 2000`,
+        `SELECT DISTINCT COALESCE(${SQL_AGENT_EXPR}, '') AS agent
+         FROM spans
+         WHERE ${SQL_LLM_WHERE}
+           AND COALESCE(${SQL_AGENT_EXPR}, '') <> ''
+         ORDER BY agent ASC
+         LIMIT 200`,
       )
-      .all() as { attributes: string }[];
-    const set = new Set<string>();
-    for (const r of rows) {
-      try {
-        const a = JSON.parse(r.attributes ?? "{}");
-        const agent = pick(
-          a,
-          "copilot.chat.agent",
-          "copilot.chat.command",
-          "gen_ai.agent.name",
-          "copilot.chat.location",
-          "copilot.chat.intent",
-        );
-        if (agent) set.add(String(agent));
-      } catch {
-        /* */
-      }
-    }
-    return Array.from(set).sort();
+      .all() as Array<{ agent: string }>;
+    return rows.map((r) => r.agent).filter(Boolean);
   });
 
   app.get("/api/copilot/timeseries", async (req) => {
@@ -434,7 +528,31 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
       to: q.to,
       window: remapped,
     });
-    const calls = fetchCalls(fromNs, toNs, q.agent, 50_000);
+    const dailyRows = db
+      .prepare(
+        `SELECT
+           strftime('%Y-%m-%d', start_ns/1000000000, 'unixepoch') AS day,
+           COALESCE(${SQL_MODEL_EXPR}, '') AS model,
+           COUNT(*) AS calls,
+           SUM(${SQL_INPUT_EXPR}) AS input_tokens,
+           SUM(${SQL_OUTPUT_EXPR}) AS output_tokens,
+           SUM(${SQL_CACHE_READ_EXPR}) AS cache_read_tokens,
+           SUM(${SQL_CACHE_CREATE_EXPR}) AS cache_creation_tokens
+         FROM spans
+         WHERE start_ns BETWEEN ? AND ?
+           AND ${SQL_LLM_WHERE}
+           AND (? IS NULL OR ? = 'all' OR COALESCE(${SQL_AGENT_EXPR}, '') = ?)
+         GROUP BY day, model`,
+      )
+      .all(fromNs, toNs, q.agent ?? null, q.agent ?? null, q.agent ?? null) as Array<{
+      day: string;
+      model: string;
+      calls: number;
+      input_tokens: number;
+      output_tokens: number;
+      cache_read_tokens: number;
+      cache_creation_tokens: number;
+    }>;
 
     const fromMs = Number(BigInt(fromNs) / 1_000_000n);
     const toMs = Number(BigInt(toNs) / 1_000_000n);
@@ -463,17 +581,26 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
         cost: 0,
       });
     }
-    for (const c of calls) {
-      const ms = Number(BigInt(c.start_ns) / 1_000_000n);
-      const k = bucketKey(bucketStartMs(ms, bucket), bucket);
+    for (const r of dailyRows) {
+      const dayMs = Date.parse(`${r.day}T00:00:00.000Z`);
+      const k = bucketKey(bucketStartMs(dayMs, bucket), bucket);
       const row = map.get(k);
       if (!row) continue;
-      row.calls += 1;
-      row.input_tokens += c.input_tokens;
-      row.output_tokens += c.output_tokens;
-      row.cache_read_tokens += c.cache_read_tokens;
-      row.cache_creation_tokens += c.cache_creation_tokens;
-      row.cost += c.total_cost;
+      const p = priceFor(r.model);
+      const inTok = num(r.input_tokens);
+      const outTok = num(r.output_tokens);
+      const cacheReadTok = num(r.cache_read_tokens);
+      const cacheCreateTok = num(r.cache_creation_tokens);
+      row.calls += num(r.calls);
+      row.input_tokens += inTok;
+      row.output_tokens += outTok;
+      row.cache_read_tokens += cacheReadTok;
+      row.cache_creation_tokens += cacheCreateTok;
+      row.cost +=
+        (inTok / 1_000_000) * p.input +
+        (outTok / 1_000_000) * p.output +
+        (cacheReadTok / 1_000_000) * p.cache_read +
+        (cacheCreateTok / 1_000_000) * p.cache_creation;
     }
     return Array.from(map.values()).sort((a, b) => a.ts - b.ts);
   });
