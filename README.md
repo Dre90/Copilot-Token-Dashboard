@@ -12,6 +12,7 @@ Local dashboard for OTel data from VS Code GitHub Copilot Chat. It receives OTLP
 ```bash
 git clone https://github.com/Dre90/Copilot-Token-Dashboard.git
 cd Copilot-Token-Dashboard
+mise trust
 mise install
 mise run install
 mise run hooks:install   # recommended, one-time
