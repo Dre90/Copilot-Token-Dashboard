@@ -1,6 +1,6 @@
 # AGENTS.md (server)
 
-Denne filen gjelder for alt under `server/`.
+This file applies to everything under `server/`.
 
 ## Stack
 
@@ -9,15 +9,16 @@ Denne filen gjelder for alt under `server/`.
 - Lagring: SQLite (`node:sqlite`)
 - Telemetri-inngang: OTLP/HTTP (`/v1/traces`, `/v1/metrics`, `/v1/logs`)
 
-## Viktige filer
+## Key Files
 
-- `src/index.ts`: starter OTLP- og API-server
-- `src/otlp.ts`: parsing/deserialisering av OTLP
-- `src/db.ts`: schema og prepared statements
-- `src/api.ts`: generelle API-ruter + SSE
-- `src/copilot.ts`: copilot-spesifikke ruter og kost/tidslogikk
+- `src/index.ts`: starts OTLP and API servers
+- `src/routes/otlp.ts`: OTLP routes and parsing/deserialization
+- `src/routes/api.ts`: general API routes + SSE
+- `src/routes/copilot.ts`: copilot-specific routes and cost/time logic
+- `src/core/db.ts`: schema and prepared statements
+- `src/core/sse.ts`: SSE client management/broadcast
 
-## Kommandoer
+## Commands
 
 - Dev: `npm run dev`
 - Typecheck: `npm run typecheck`
@@ -27,35 +28,35 @@ Denne filen gjelder for alt under `server/`.
 - Format check: `npm run format:check`
 - Format write: `npm run format`
 
-## Endringsregler
+## Change Rules
 
-- Hold ruter tynne; flytt logikk til rene funksjoner der det er mulig.
-- Ved nye query-parametre: legg til validering og tester.
-- Ved endring i tidsvindu/kostberegning: oppdater eller legg til enhetstester.
-- Ikke bryt eksisterende JSON-format pa API-responser uten koordinering.
+- Keep routes thin; move logic to pure functions where possible.
+- For new query params: add validation and tests.
+- For changes in time windows/cost calculations: update or add unit tests.
+- Do not break existing API response JSON formats without coordination.
 
 ## Required Checks for PR (server)
 
-Kjor disse i `server/` for server-endringer:
+Run these in `server/` for backend changes:
 
 1. `npm run format:check`
 2. `npm run lint`
 3. `npm run typecheck`
 4. `npm run test`
-5. `npm run build` ved endring i runtime/tsconfig/entrypoints
+5. `npm run build` when runtime/tsconfig/entrypoints are changed
 
-## Observability og API-regler (server)
+## Observability And API Rules (server)
 
-- Behold bakoverkompatibilitet for feltnavn i `/api/copilot/*` med mindre breaking change er avtalt.
-- Endring i kostmodeller eller token-mapping skal ledsages av testoppdatering i `src/copilot.test.ts`.
-- Endring i OTLP parsing (`src/otlp.ts`) skal ikke redusere robusthet for manglende/ukjente attributes.
-- Nye API-felt skal vaere additive der mulig.
+- Preserve backward compatibility for field names in `/api/copilot/*` unless a breaking change is explicitly agreed.
+- Changes in cost models or token mapping must include corresponding test updates in `src/routes/copilot.test.ts`.
+- Changes in OTLP parsing (`src/routes/otlp.ts`) must not reduce robustness for missing/unknown attributes.
+- New API fields should be additive where possible.
 
 ## Testing
 
 - Bruk Vitest for enhetstester (`src/**/*.test.ts`).
 - Prioriter tester for:
-  - tidsintervall parsing
-  - bucket/aggregering
-  - token/kost-kalkulasjon
-  - robusthet ved manglende eller ugyldige attributes
+  - time interval parsing
+  - bucket/aggregation
+  - token/cost calculation
+  - robustness for missing or invalid attributes

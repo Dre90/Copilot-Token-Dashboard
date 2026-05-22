@@ -1,20 +1,20 @@
 # AGENTS.md
 
-Retningslinjer for AI-agenter i dette repoet. Denne filen gjelder hele prosjektet.
+Guidelines for AI agents in this repository. This file applies to the whole project.
 
-## Prosjektoversikt
+## Project Overview
 
-- Monorepo med to apper: `server` (Fastify + SQLite + OTLP) og `web` (Vite + React + Tailwind).
-- OTLP mottas pa port 4318, API/SSE server pa 4319, frontend pa 5173.
+- Monorepo with two apps: `server` (Fastify + SQLite + OTLP) and `web` (Vite + React + Tailwind).
+- OTLP is received on port 4318, API/SSE server on 4319, frontend on 5173.
 
-## Foretrukket arbeidsflyt
+## Preferred Workflow
 
-1. Les relevant kode for området som skal endres.
-2. Gjør minst mulig endring som løser oppgaven.
-3. Kjør verifikasjon lokalt for berorte deler.
-4. Oppdater dokumentasjon ved behov.
+1. Read relevant code for the area being changed.
+2. Make the smallest change that solves the task.
+3. Run local verification for affected parts.
+4. Update documentation when needed.
 
-## Kommandoer (repo-rot)
+## Commands (Repo Root)
 
 - Install: `mise run install`
 - Dev: `mise run dev`
@@ -25,46 +25,46 @@ Retningslinjer for AI-agenter i dette repoet. Denne filen gjelder hele prosjekte
 - Format write: `mise run format`
 - Build: `mise run build`
 
-## Kvalitetskrav for endringer
+## Quality Requirements For Changes
 
-- Nye features skal ha tester nar det er fornuftig.
-- Kjør minst `mise run lint` og relevante tester for kode som er endret.
-- Ikke introduser store refactors uten eksplisitt behov.
-- Behold eksisterende API-kontrakter med mindre endring er avtalt.
+- New features should include tests when reasonable.
+- Run at least `mise run lint` and relevant tests for changed code.
+- Do not introduce large refactors without explicit need.
+- Keep existing API contracts unless a change is agreed.
 
 ## Required Checks for PR
 
-Kjor disse fra repo-rot for alle kodeendringer:
+Run these from repo root for all code changes:
 
 1. `mise run format:check`
 2. `mise run lint`
 3. `mise run typecheck`
 4. `mise run test`
-5. `mise run build` nar bygg/konfig er berort
+5. `mise run build` when build/config is affected
 
-Hvis en check feiler, skal PR ikke anses klar.
+If any check fails, the PR should not be considered ready.
 
-## Branch og Commit-konvensjoner
+## Branch And Commit Conventions
 
-- Branch-navn: `feat/<kort-beskrivelse>`, `fix/<kort-beskrivelse>`, `chore/<kort-beskrivelse>`.
+- Branch names: `feat/<short-description>`, `fix/<short-description>`, `chore/<short-description>`.
 - Commit-format: Conventional Commits (`feat:`, `fix:`, `chore:`, `test:`, `docs:`, `refactor:`).
-- Hold commits sma og fokuserte, unnga blanding av mekaniske formateringer og feature-endringer i samme commit.
+- Keep commits small and focused; avoid mixing mechanical formatting with feature changes in the same commit.
 
-## Observability og API-kompatibilitet
+## Observability And API Compatibility
 
-- Endringer i OTLP-parsing eller attributtnokler skal vurderes opp mot eksisterende dashboards og tester.
-- Endringer i responsskjema for `/api/*` krever samtidig oppdatering av klientkode i `web/src/api` og relevante tester.
-- Unnga breaking changes i eksisterende endepunkter uten eksplisitt avtale og dokumentasjon i README.
+- Changes in OTLP parsing or attribute keys must be evaluated against existing dashboards and tests.
+- Changes to response schemas for `/api/*` require corresponding updates in `web/src/api` and relevant tests.
+- Avoid breaking changes in existing endpoints without explicit agreement and README documentation.
 
-## Stil og konvensjoner
+## Style And Conventions
 
-- TypeScript strict mode er standard.
-- Hold funksjoner sma og testbare.
-- Foretrekk rene hjelpefunksjoner for forretningslogikk.
-- Bruk `oxlint` for lint og `oxfmt` for formattering.
+- TypeScript strict mode is the default.
+- Keep functions small and testable.
+- Prefer pure helper functions for business logic.
+- Use `oxlint` for linting and `oxfmt` for formatting.
 
-## Forbudt uten eksplisitt avtale
+## Forbidden Without Explicit Agreement
 
-- Destruktive git-kommandoer som hard reset.
-- Endre database-skjema uten a oppdatere alle berorte lag.
-- Endre porter/endepunkter uten a oppdatere README og klientkode.
+- Destructive git commands such as hard reset.
+- Changing database schema without updating all affected layers.
+- Changing ports/endpoints without updating README and client code.

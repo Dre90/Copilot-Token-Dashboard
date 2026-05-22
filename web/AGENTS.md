@@ -1,6 +1,6 @@
 # AGENTS.md (web)
 
-Denne filen gjelder for alt under `web/`.
+This file applies to everything under `web/`.
 
 ## Stack
 
@@ -8,16 +8,17 @@ Denne filen gjelder for alt under `web/`.
 - Tailwind CSS v4
 - Recharts for visualisering
 
-## Viktige filer
+## Key Files
 
-- `src/App.tsx`: toppnavigasjon mellom visninger
-- `src/components/CopilotDashboard.tsx`: live dashboard
-- `src/components/CopilotHistory.tsx`: historikk, trender og innsikt
-- `src/api/copilot.ts`: copilot API-klient
-- `src/api/client.ts`: generell API/SSE-klient
-- `src/lib/copilotInsights.ts`: ren innsiktslogikk
+- `src/App.tsx`: top-level navigation between views
+- `src/features/copilot/components/CopilotDashboard.tsx`: live dashboard
+- `src/features/copilot/components/CopilotHistory.tsx`: history, trends, and insights
+- `src/api/copilot.ts`: copilot API client
+- `src/api/client.ts`: generic API/SSE client
+- `src/features/copilot/lib/copilotInsights.ts`: pure insights logic
+- `src/shared/components/`: shared UI components
 
-## Kommandoer
+## Commands
 
 - Dev: `npm run dev`
 - Typecheck: `npm run typecheck`
@@ -29,38 +30,38 @@ Denne filen gjelder for alt under `web/`.
 
 ## UI/UX-regler
 
-- Bevar norsk labels/tekster der de allerede brukes.
-- Ikke flytt på hovednavigasjon uten klar grunn.
-- Store nye seksjoner skal holdes bak tydelige view-tabs/valg.
-- Behold god lesbarhet pa mobile bredder.
+- Preserve existing English labels/copy and tone in the UI.
+- Do not move main navigation without a clear reason.
+- Keep large new sections behind clear view tabs/selections.
+- Maintain good readability on mobile widths.
 
-## Endringsregler
+## Change Rules
 
-- Flytt beregningslogikk ut av komponenter nar den blir kompleks.
-- Hold API-kall i `src/api/*`, ikke direkte i mange komponenter.
-- Ved nye filtre eller visninger: legg til tester for hjelpefunksjoner/URL-bygging.
+- Move calculation logic out of components when it becomes complex.
+- Keep API calls in `src/api/*`, not spread directly across many components.
+- For new filters/views: add tests for helper functions and URL building.
 
 ## Required Checks for PR (web)
 
-Kjor disse i `web/` for frontend-endringer:
+Run these in `web/` for frontend changes:
 
 1. `npm run format:check`
 2. `npm run lint`
 3. `npm run typecheck`
 4. `npm run test`
-5. `npm run build` ved endring i Vite-konfig, imports eller produksjonsbygg
+5. `npm run build` when Vite config, imports, or production build setup changes
 
-## UI og API-kompatibilitet (web)
+## UI And API Compatibility (web)
 
-- Bevar eksisterende faner/filtre og brukerflyt med mindre oppgaven eksplisitt krever redesign.
-- Nye datavisninger skal ha tydelig plassering (egen view-tab eller klart seksjonsnavn).
-- Endring i API-kall eller query-parametre skal oppdateres samlet i `src/api/*` og testes.
-- Ved endring i innsiktsberegninger skal `src/lib/copilotInsights.test.ts` oppdateres.
+- Preserve existing tabs/filters and user flow unless the task explicitly requires redesign.
+- New data views should have clear placement (dedicated view tab or clearly named section).
+- Changes in API calls or query params should be centralized in `src/api/*` and tested.
+- When insights calculations change, update `src/features/copilot/lib/copilotInsights.test.ts`.
 
 ## Testing
 
-- Bruk Vitest for enhetstester (`src/**/*.test.ts`).
-- Prioriter tester for:
-  - URL/query-bygging i API-klienter
-  - stream-hendelser (EventSource)
-  - innsiktsberegninger (median, terskler, prognose)
+- Use Vitest for unit tests (`src/**/*.test.ts`).
+- Prioritize tests for:
+  - URL/query building in API clients
+  - stream events (EventSource)
+  - insights calculations (median, thresholds, forecast)

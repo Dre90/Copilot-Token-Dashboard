@@ -1,25 +1,35 @@
 # Copilot OTel Monitoring
 
-Lokal dashboard for OTel-data fra VS Code GitHub Copilot Chat. Tar imot OTLP/HTTP på `:4318`, lagrer i SQLite, viser live og historiske data (time/dag/måned/år) i en React-app.
+Local dashboard for OTel data from VS Code GitHub Copilot Chat. It receives OTLP/HTTP on `:4318`, stores data in SQLite, and shows live and historical views (hour/day/month/year) in a React app.
 
-## Forutsetninger
+## Prerequisites
 
-- [mise](https://mise.jdx.dev/) installert
-- VS Code med GitHub Copilot Chat og `github.copilot.chat.otel.enabled: true`
+- [mise](https://mise.jdx.dev/) installed
+- VS Code with GitHub Copilot Chat and `github.copilot.chat.otel.enabled: true`
 
-## Kom i gang
+## First-Time Local Setup
 
 ```bash
-mise install           # henter Node 26
-mise run install       # installerer deps i server/ og web/
-mise run dev           # starter server (:4318 + :4319) og web (:5173) parallelt
+git clone https://github.com/Dre90/Copilot-Token-Dashboard.git
+cd Copilot-Token-Dashboard
+mise install
+mise run install
+mise run hooks:install   # recommended, one-time
 ```
 
-Åpne http://localhost:5173.
+## Start The App
 
-## Skru på OTel i VS Code
+```bash
+mise run dev           # starts server (:4318 + :4319) and web (:5173) in parallel
+```
 
-I `settings.json`:
+Open http://localhost:5173.
+
+To verify the backend is running, open http://localhost:4319/api/health.
+
+## Enable OTel In VS Code
+
+In `settings.json`:
 
 ```json
 {
@@ -27,53 +37,52 @@ I `settings.json`:
 }
 ```
 
-Default endpoint er `http://localhost:4318` — det treffer denne mottakeren direkte. Restart VS Code-vinduet etter endring.
+The default endpoint is `http://localhost:4318`, which targets this receiver directly. Restart the VS Code window after changing this setting.
 
-## Struktur
+## Structure
 
 ```
-mise.toml             # Node-versjon + tasks
-server/               # Fastify OTLP-mottaker + REST + SSE → SQLite
-  src/index.ts        # bootstrap (to lyttere: 4318 OTLP, 4319 API)
-  src/otlp.ts         # /v1/traces, /v1/metrics, /v1/logs (proto + json)
-  src/db.ts           # SQLite-skjema + prepared statements
-  src/api.ts          # REST + SSE
-  src/sse.ts          # broadcaster
+mise.toml             # Node version + tasks
+server/               # Fastify OTLP receiver + REST + SSE -> SQLite
+  src/index.ts        # bootstrap (two listeners: 4318 OTLP, 4319 API)
+  src/routes/         # API and OTLP routes
+  src/core/           # DB and SSE core
 web/                  # Vite + React 19 + TS + Tailwind v4
   src/App.tsx
-  src/components/LiveDashboard.tsx
-  src/components/Historical.tsx     # hour/day/month/year via Recharts
-  src/components/TraceTable.tsx
-  src/api/client.ts
+  src/features/       # feature modules (copilot, telemetry)
+  src/shared/         # shared UI components
+  src/api/            # API clients
 ```
 
 ## Tasks
 
-- `mise run dev:server` — kun backend
-- `mise run dev:web` — kun frontend
-- `mise run build` — bygg begge
-- `mise run typecheck` — typesjekk begge
-- `mise run clean` — slett SQLite-fil
+- `mise run dev:server` — backend only
+- `mise run dev:web` — frontend only
+- `mise run build` — build both
+- `mise run typecheck` — typecheck both
+- `mise run lint` — lint both
+- `mise run test` — test both
+- `mise run clean` — remove SQLite file
 
-## Lokale Git hooks (anbefalt)
+## Local Git Hooks (Recommended)
 
-Sett opp lokale hooks (engangs):
+Set up local hooks (one-time):
 
 ```bash
 mise run hooks:install
 ```
 
-Dette aktiverer versjonerte hooks fra `.githooks/`:
+This enables versioned hooks from `.githooks/`:
 
-- `pre-commit`: kjører `mise run format:check` og `mise run lint`
-- `pre-push`: kjører `mise run typecheck` og `mise run test`
+- `pre-commit`: runs `mise run format:check` and `mise run lint`
+- `pre-push`: runs `mise run typecheck` and `mise run test`
 
 ## Endpoints
 
-- OTLP-mottaker: `POST http://localhost:4318/v1/{traces,metrics,logs}`
+- OTLP receiver: `POST http://localhost:4318/v1/{traces,metrics,logs}`
 - API:
   - `GET /api/health`
-  - `GET /api/summary` — siste 5 min
+  - `GET /api/summary` — last 5 minutes
   - `GET /api/metrics/list`
   - `GET /api/metrics?name=<>&bucket=hour|day|month|year&from=&to=`
   - `GET /api/traces?limit=&from=&to=`
