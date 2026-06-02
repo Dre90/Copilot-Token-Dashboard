@@ -569,16 +569,19 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
   });
 
   app.get("/api/copilot/agents", async () => {
+    // Limit to last 90 days to avoid a full table scan as the DB grows.
+    const cutoffNs = ((BigInt(Date.now()) - 90n * 86_400_000n) * 1_000_000n).toString();
     const rows = db
       .prepare(
         `SELECT DISTINCT COALESCE(${SQL_AGENT_EXPR}, '') AS agent
          FROM spans
-         WHERE ${SQL_LLM_WHERE}
+         WHERE start_ns >= ?
+           AND ${SQL_LLM_WHERE}
            AND COALESCE(${SQL_AGENT_EXPR}, '') <> ''
          ORDER BY agent ASC
          LIMIT 200`,
       )
-      .all() as Array<{ agent: string }>;
+      .all(cutoffNs) as Array<{ agent: string }>;
     return rows.map((r) => r.agent).filter(Boolean);
   });
 

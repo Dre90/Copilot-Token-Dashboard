@@ -8,6 +8,10 @@ mkdirSync(dirname(DB_PATH), { recursive: true });
 export const db = new DatabaseSync(DB_PATH);
 db.exec(`PRAGMA journal_mode = WAL;`);
 db.exec(`PRAGMA synchronous = NORMAL;`);
+// 64 MB page cache (negative = KiB), temp tables in memory, 256 MB mmap I/O
+db.exec(`PRAGMA cache_size = -65536;`);
+db.exec(`PRAGMA temp_store = MEMORY;`);
+db.exec(`PRAGMA mmap_size = 268435456;`);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS spans (
@@ -27,6 +31,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_spans_chat_start ON spans(start_ns) WHERE name = 'chat';
   CREATE INDEX IF NOT EXISTS idx_spans_name  ON spans(name);
   CREATE INDEX IF NOT EXISTS idx_spans_trace ON spans(trace_id);
+  CREATE INDEX IF NOT EXISTS idx_spans_genai_start ON spans(start_ns) WHERE attributes LIKE '%gen_ai.usage%';
+  CREATE INDEX IF NOT EXISTS idx_spans_llm_start ON spans(start_ns) WHERE attributes LIKE '%llm.usage%';
 
   CREATE TABLE IF NOT EXISTS metric_points (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
