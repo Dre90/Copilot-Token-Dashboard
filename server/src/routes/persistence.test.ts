@@ -274,4 +274,125 @@ describe.sequential("db migrations and LLM persistence", () => {
     await app.close();
     db.close();
   });
+
+  it("aggregates github.copilot signals by repo, tool and hook", async () => {
+    const { dir, dbPath } = makeTempDbPath();
+    tempDirs.push(dir);
+
+    const { db, registerCopilotRoutes } = await loadServerModules(dbPath);
+    const app = Fastify();
+    registerCopilotRoutes(app);
+
+    const nowNs = BigInt(Date.now()) * 1_000_000n;
+    const insert = db.prepare(
+      `INSERT INTO spans (
+         span_id, trace_id, parent_span_id, name, kind, start_ns, end_ns, duration_ms, status_code,
+         attributes, llm_model, llm_agent, input_tokens, output_tokens, cache_read_tokens,
+         cache_creation_tokens, is_llm_call
+       ) VALUES (?, ?, NULL, ?, 0, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+
+    insert.run(
+      "sig-1",
+      "trace-sig-1",
+      "assistant_call",
+      (nowNs - 1_000_000n).toString(),
+      nowNs.toString(),
+      10,
+      JSON.stringify({
+        "github.copilot.git.repository": "acme/shop",
+        "github.copilot.tool.parameters.mcp_tool_name": "run_in_terminal",
+        "github.copilot.hook.name": "pre-commit",
+        "github.copilot.hook.outcome": "success",
+      }),
+      "gpt-5-mini",
+      "workspace",
+      1000,
+      500,
+      50,
+      0,
+      1,
+    );
+
+    insert.run(
+      "sig-2",
+      "trace-sig-2",
+      "assistant_call",
+      (nowNs - 2_000_000n).toString(),
+      nowNs.toString(),
+      20,
+      JSON.stringify({
+        "github.copilot.git.repository": "acme/shop",
+        "github.copilot.tool.parameters.mcp_tool_name": "run_in_terminal",
+        "github.copilot.hook.name": "pre-commit",
+        "github.copilot.hook.outcome": "failed",
+      }),
+      "gpt-5-mini",
+      "workspace",
+      500,
+      200,
+      0,
+      0,
+      1,
+    );
+
+    insert.run(
+      "sig-3",
+      "trace-sig-3",
+      "assistant_call",
+      (nowNs - 3_000_000n).toString(),
+      nowNs.toString(),
+      30,
+      JSON.stringify({
+        "github.copilot.repo.full_name": "acme/docs",
+        "gen_ai.tool.name": "edit_file",
+        "github.copilot.hook.name": "pre-push",
+        "github.copilot.hook.outcome": "ok",
+      }),
+      "gpt-5-mini",
+      "workspace",
+      300,
+      120,
+      0,
+      0,
+      1,
+    );
+
+    const from = new Date(Number((nowNs - 5_000_000_000n) / 1_000_000n)).toISOString();
+    const to = new Date(Number((nowNs + 5_000_000_000n) / 1_000_000n)).toISOString();
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/copilot/signals?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=10`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      total_calls: number;
+      calls_with_signals: number;
+      repos: Array<{ repo: string; calls: number }>;
+      tools: Array<{ tool: string; calls: number; avg_duration_ms: number }>;
+      hooks: Array<{ hook: string; total: number; success: number; failed: number }>;
+    };
+
+    expect(body.total_calls).toBe(3);
+    expect(body.calls_with_signals).toBe(3);
+
+    expect(body.repos[0]?.repo).toBe("acme/shop");
+    expect(body.repos[0]?.calls).toBe(2);
+    expect(body.repos[1]?.repo).toBe("acme/docs");
+    expect(body.repos[1]?.calls).toBe(1);
+
+    expect(body.tools[0]?.tool).toBe("run_in_terminal");
+    expect(body.tools[0]?.calls).toBe(2);
+    expect(body.tools[0]?.avg_duration_ms).toBe(15);
+
+    const preCommit = body.hooks.find((h) => h.hook === "pre-commit");
+    expect(preCommit).toBeDefined();
+    expect(preCommit?.total).toBe(2);
+    expect(preCommit?.success).toBe(1);
+    expect(preCommit?.failed).toBe(1);
+
+    await app.close();
+    db.close();
+  });
 });

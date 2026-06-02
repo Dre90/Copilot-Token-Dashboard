@@ -276,7 +276,40 @@ const SQL_CACHE_CREATE_EXPR = `COALESCE(
   0
 )`;
 
+const SQL_REPO_EXPR = `COALESCE(
+  json_extract(attributes, '$."github.copilot.repo.full_name"'),
+  json_extract(attributes, '$."github.copilot.git.repository"'),
+  json_extract(attributes, '$."github.copilot.repository"'),
+  json_extract(attributes, '$."github.copilot.repo"'),
+  ''
+)`;
+
+const SQL_TOOL_EXPR = `COALESCE(
+  json_extract(attributes, '$."github.copilot.tool.name"'),
+  json_extract(attributes, '$."github.copilot.tool.parameters.mcp_tool_name"'),
+  json_extract(attributes, '$."gen_ai.tool.name"'),
+  json_extract(attributes, '$."github.copilot.tool"'),
+  ''
+)`;
+
+const SQL_HOOK_EXPR = `COALESCE(
+  json_extract(attributes, '$."github.copilot.hook.name"'),
+  json_extract(attributes, '$."github.copilot.hook"'),
+  ''
+)`;
+
+const SQL_HOOK_OUTCOME_EXPR = `LOWER(COALESCE(
+  json_extract(attributes, '$."github.copilot.hook.outcome"'),
+  json_extract(attributes, '$."github.copilot.hook.status"'),
+  ''
+))`;
+
 const SQL_LLM_WHERE = `(is_llm_call = 1 OR name = 'chat' OR attributes LIKE '%gen_ai.usage%' OR attributes LIKE '%llm.usage%')`;
+const SQL_SIGNAL_WHERE = `(${SQL_LLM_WHERE} OR attributes LIKE '%github.copilot.%' OR attributes LIKE '%gen_ai.tool.name%')`;
+
+function isHookSuccess(outcome: string): boolean {
+  return ["ok", "success", "passed", "pass", "completed"].includes(outcome);
+}
 
 // We treat any LLM span as a "call". Copilot's chat span is named 'chat',
 // but be liberal and match any span that has gen_ai usage attributes.
@@ -589,6 +622,141 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
       )
       .all(cutoffNs) as Array<{ agent: string }>;
     return rows.map((r) => r.agent).filter(Boolean);
+  });
+
+  app.get("/api/copilot/signals", async (req) => {
+    const q = req.query as {
+      from?: string;
+      to?: string;
+      window?: string;
+      agent?: string;
+      limit?: string;
+    };
+    const window = q.window ?? "7d";
+    const { fromNs, toNs } = timeRange({ from: q.from, to: q.to, window });
+    const limit = Math.max(1, Math.min(parseInt(q.limit ?? "8", 10) || 8, 50));
+
+    const rows = db
+      .prepare(
+        `SELECT
+           COALESCE(${SQL_REPO_EXPR}, '') AS repo,
+           COALESCE(${SQL_TOOL_EXPR}, '') AS tool,
+           COALESCE(${SQL_HOOK_EXPR}, '') AS hook,
+           COALESCE(${SQL_HOOK_OUTCOME_EXPR}, '') AS hook_outcome,
+           COALESCE(${SQL_MODEL_EXPR}, '') AS model,
+           CAST(${SQL_INPUT_EXPR} AS INTEGER) AS input_tokens,
+           CAST(${SQL_OUTPUT_EXPR} AS INTEGER) AS output_tokens,
+           CAST(${SQL_CACHE_READ_EXPR} AS INTEGER) AS cache_read_tokens,
+           CAST(${SQL_CACHE_CREATE_EXPR} AS INTEGER) AS cache_creation_tokens,
+           duration_ms
+         FROM spans
+         WHERE start_ns BETWEEN ? AND ?
+           AND ${SQL_SIGNAL_WHERE}
+           AND (? IS NULL OR ? = 'all' OR COALESCE(${SQL_AGENT_EXPR}, '') = ?)
+         ORDER BY start_ns DESC`,
+      )
+      .all(fromNs, toNs, q.agent ?? null, q.agent ?? null, q.agent ?? null) as Array<{
+      repo: string;
+      tool: string;
+      hook: string;
+      hook_outcome: string;
+      model: string;
+      input_tokens: number;
+      output_tokens: number;
+      cache_read_tokens: number;
+      cache_creation_tokens: number;
+      duration_ms: number;
+    }>;
+
+    const repoAgg = new Map<string, { repo: string; calls: number; total_cost: number }>();
+    const toolAgg = new Map<
+      string,
+      { tool: string; calls: number; total_cost: number; total_duration_ms: number }
+    >();
+    const hookAgg = new Map<string, { hook: string; total: number; success: number }>();
+
+    let callsWithSignals = 0;
+    for (const row of rows) {
+      const p = priceFor(row.model);
+      const inTok = num(row.input_tokens);
+      const outTok = num(row.output_tokens);
+      const cacheReadTok = num(row.cache_read_tokens);
+      const cacheCreateTok = num(row.cache_creation_tokens);
+      const cost =
+        (inTok / 1_000_000) * p.input +
+        (outTok / 1_000_000) * p.output +
+        (cacheReadTok / 1_000_000) * p.cache_read +
+        (cacheCreateTok / 1_000_000) * p.cache_creation;
+
+      if (row.repo || row.tool || row.hook) callsWithSignals += 1;
+
+      if (row.repo) {
+        const e = repoAgg.get(row.repo) ?? { repo: row.repo, calls: 0, total_cost: 0 };
+        e.calls += 1;
+        e.total_cost += cost;
+        repoAgg.set(row.repo, e);
+      }
+
+      if (row.tool) {
+        const e = toolAgg.get(row.tool) ?? {
+          tool: row.tool,
+          calls: 0,
+          total_cost: 0,
+          total_duration_ms: 0,
+        };
+        e.calls += 1;
+        e.total_cost += cost;
+        e.total_duration_ms += num(row.duration_ms);
+        toolAgg.set(row.tool, e);
+      }
+
+      if (row.hook) {
+        const e = hookAgg.get(row.hook) ?? { hook: row.hook, total: 0, success: 0 };
+        e.total += 1;
+        if (isHookSuccess(row.hook_outcome)) e.success += 1;
+        hookAgg.set(row.hook, e);
+      }
+    }
+
+    const denom = Math.max(1, callsWithSignals);
+    const repos = Array.from(repoAgg.values())
+      .sort((a, b) => b.calls - a.calls)
+      .slice(0, limit)
+      .map((r) => ({
+        ...r,
+        share_pct: (r.calls / denom) * 100,
+      }));
+
+    const tools = Array.from(toolAgg.values())
+      .sort((a, b) => b.calls - a.calls)
+      .slice(0, limit)
+      .map((r) => ({
+        ...r,
+        avg_duration_ms: r.calls ? r.total_duration_ms / r.calls : 0,
+        share_pct: (r.calls / denom) * 100,
+      }));
+
+    const hooks = Array.from(hookAgg.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, limit)
+      .map((r) => ({
+        hook: r.hook,
+        total: r.total,
+        success: r.success,
+        failed: r.total - r.success,
+        success_rate_pct: r.total ? (r.success / r.total) * 100 : 0,
+      }));
+
+    return {
+      window,
+      from_ns: fromNs,
+      to_ns: toNs,
+      total_calls: rows.length,
+      calls_with_signals: callsWithSignals,
+      repos,
+      tools,
+      hooks,
+    };
   });
 
   app.get("/api/copilot/leaderboard", async (req) => {
