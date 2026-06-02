@@ -42,6 +42,10 @@ function fmtCost(n: number): string {
   if (cents >= 0.001) return `${cents.toFixed(3)}¢`;
   return "<0.001¢";
 }
+const NOK_RATE = 9.26;
+function fmtNok(usd: number): string {
+  return `kr ${(usd * NOK_RATE).toFixed(2)}`;
+}
 function fmtTime(ns: string): string {
   const ms = Number(BigInt(ns) / 1_000_000n);
   return new Date(ms).toLocaleTimeString("nb-NO", { hour12: false });
@@ -305,7 +309,11 @@ export function CopilotDashboard() {
               <StatCard
                 label="Cost"
                 value={summary ? `$${summary.total_cost.toFixed(4)}` : "$0"}
-                sub={summary ? `${summary.credits.toFixed(2)} credits` : undefined}
+                sub={
+                  summary
+                    ? `${summary.credits.toFixed(2)} credits · ${fmtNok(summary.total_cost)}`
+                    : undefined
+                }
                 accent="text-amber-300"
                 className="rounded-xl bg-slate-900/70 p-4"
                 valueClassName="text-3xl font-bold"

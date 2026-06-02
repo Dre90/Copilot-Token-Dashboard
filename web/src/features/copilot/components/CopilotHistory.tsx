@@ -67,6 +67,10 @@ function fmtCost(n: number): string {
   if (c >= 0.001) return `${c.toFixed(3)}¢`;
   return "<0.001¢";
 }
+const NOK_RATE = 9.26;
+function fmtNok(usd: number): string {
+  return `kr ${(usd * NOK_RATE).toFixed(2)}`;
+}
 function fmtTime(ns: string): string {
   const ms = Number(BigInt(ns) / 1_000_000n);
   return new Date(ms).toLocaleTimeString("nb-NO", { hour12: false });
@@ -473,6 +477,7 @@ export function CopilotHistory({
                   <StatCard
                     label="Cost today"
                     value={fmtCost(todayTotals.cost)}
+                    sub={fmtNok(todayTotals.cost)}
                     accent="text-amber-300"
                   />
                   <StatCard
@@ -880,6 +885,9 @@ export function CopilotHistory({
                     <div className="mt-1 text-xl tabular-nums text-amber-300">
                       {fmtCost(forecast.currentMonthCost)}
                     </div>
+                    <div className="text-[11px] text-slate-500 tabular-nums">
+                      {fmtNok(forecast.currentMonthCost)}
+                    </div>
                   </div>
                   <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
                     <div className="text-slate-500 text-xs uppercase tracking-widest">
@@ -887,6 +895,9 @@ export function CopilotHistory({
                     </div>
                     <div className="mt-1 text-xl tabular-nums text-amber-200">
                       {fmtCost(forecast.projectedMonthCost)}
+                    </div>
+                    <div className="text-[11px] text-slate-500 tabular-nums">
+                      {fmtNok(forecast.projectedMonthCost)}
                     </div>
                   </div>
                   <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
@@ -896,6 +907,9 @@ export function CopilotHistory({
                     <div className="mt-1 text-xl tabular-nums text-slate-200">
                       {fmtCost(forecast.avgPerDay)}
                     </div>
+                    <div className="text-[11px] text-slate-500 tabular-nums">
+                      {fmtNok(forecast.avgPerDay)}
+                    </div>
                   </div>
                   <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
                     <div className="text-slate-500 text-xs uppercase tracking-widest">
@@ -903,6 +917,9 @@ export function CopilotHistory({
                     </div>
                     <div className="mt-1 text-xl tabular-nums text-slate-200">
                       {fmtCost(forecast.prevMonthCost)}
+                    </div>
+                    <div className="text-[11px] text-slate-500 tabular-nums">
+                      {fmtNok(forecast.prevMonthCost)}
                     </div>
                   </div>
                 </div>
@@ -1062,6 +1079,9 @@ export function CopilotHistory({
                     <div className="mt-1 text-xl font-semibold text-amber-300 tabular-nums">
                       {fmtCost(cacheImpact.cacheReadCost)}
                     </div>
+                    <div className="text-[11px] text-slate-500 tabular-nums">
+                      {fmtNok(cacheImpact.cacheReadCost)}
+                    </div>
                   </div>
                   <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
                     <div className="text-[10px] uppercase tracking-widest text-slate-500">
@@ -1069,6 +1089,9 @@ export function CopilotHistory({
                     </div>
                     <div className="mt-1 text-xl font-semibold text-emerald-300 tabular-nums">
                       {fmtCost(cacheImpact.estimatedSavedCost)}
+                    </div>
+                    <div className="text-[11px] text-slate-500 tabular-nums">
+                      {fmtNok(cacheImpact.estimatedSavedCost)}
                     </div>
                   </div>
                   <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">

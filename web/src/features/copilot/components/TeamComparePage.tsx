@@ -40,6 +40,10 @@ function fmtCost(n: number): string {
   if (cents >= 0.001) return `${cents.toFixed(3)}¢`;
   return "<0.001¢";
 }
+const NOK_RATE = 9.26;
+function fmtNok(usd: number): string {
+  return `kr ${(usd * NOK_RATE).toFixed(2)}`;
+}
 
 function fromNsToDate(ns: string): string {
   const ms = Number(BigInt(ns) / 1_000_000n);
@@ -150,9 +154,12 @@ function TeamCompareSummary({
         {loading ? (
           <Skeleton className="mt-2 h-8 w-28 rounded" />
         ) : (
-          <div className="mt-2 text-3xl font-semibold text-amber-300 tabular-nums">
-            {fmtCost(weekTotal)}
-          </div>
+          <>
+            <div className="mt-2 text-3xl font-semibold text-amber-300 tabular-nums">
+              {fmtCost(weekTotal)}
+            </div>
+            <div className="mt-0.5 text-xs text-slate-500 tabular-nums">{fmtNok(weekTotal)}</div>
+          </>
         )}
         <div className="mt-1 text-xs text-slate-500">
           {week?.from_ns && week?.to_ns && week.from_ns !== "0"
@@ -165,9 +172,12 @@ function TeamCompareSummary({
         {loading ? (
           <Skeleton className="mt-2 h-8 w-28 rounded" />
         ) : (
-          <div className="mt-2 text-3xl font-semibold text-cyan-300 tabular-nums">
-            {fmtCost(monthTotal)}
-          </div>
+          <>
+            <div className="mt-2 text-3xl font-semibold text-cyan-300 tabular-nums">
+              {fmtCost(monthTotal)}
+            </div>
+            <div className="mt-0.5 text-xs text-slate-500 tabular-nums">{fmtNok(monthTotal)}</div>
+          </>
         )}
         <div className="mt-1 text-xs text-slate-500">
           {month?.from_ns && month?.to_ns && month.from_ns !== "0"
