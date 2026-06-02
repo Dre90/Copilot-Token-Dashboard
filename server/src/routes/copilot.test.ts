@@ -40,6 +40,12 @@ describe("copilot helpers", () => {
       cache_read: 0.2,
       cache_creation: 0,
     });
+    expect(priceFor("claude-opus-4.8")).toEqual({
+      input: 5.0,
+      output: 25.0,
+      cache_read: 0.5,
+      cache_creation: 6.25,
+    });
     expect(priceFor("unknown-model")).toEqual({
       input: 0,
       output: 0,
