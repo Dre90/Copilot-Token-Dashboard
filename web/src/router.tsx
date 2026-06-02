@@ -13,6 +13,7 @@ import {
   CopilotDashboard,
   CopilotHelp,
   CopilotHistory,
+  CopilotSignalsPage,
   TeamComparePage,
 } from "./features/copilot/components";
 import {
@@ -105,6 +106,14 @@ function AppShell() {
             activeProps={{ className: navClass(true) }}
           >
             Team
+          </Link>
+          <Link
+            to="/signals"
+            preload="render"
+            className={navClass(false)}
+            activeProps={{ className: navClass(true) }}
+          >
+            Signals
           </Link>
           <Link to="/help" className={navClass(false)} activeProps={{ className: navClass(true) }}>
             Help
@@ -217,6 +226,14 @@ const teamCompareRoute = createRoute({
   component: TeamComparePage,
 });
 
+const signalsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/signals",
+  staleTime: 2 * 60_000,
+  gcTime: 10 * 60_000,
+  component: CopilotSignalsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   liveRoute,
   historyRedirectRoute,
@@ -224,6 +241,7 @@ const routeTree = rootRoute.addChildren([
   historyTrendsRoute,
   historyInsightsRoute,
   teamCompareRoute,
+  signalsRoute,
   helpRoute,
 ]);
 

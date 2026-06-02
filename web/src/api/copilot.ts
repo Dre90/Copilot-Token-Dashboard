@@ -68,6 +68,41 @@ export type CopilotLeaderboardResponse = {
   rows: CopilotLeaderboardRow[];
 };
 
+export type CopilotSignalsRepoRow = {
+  repo: string;
+  calls: number;
+  total_cost: number;
+  share_pct: number;
+};
+
+export type CopilotSignalsToolRow = {
+  tool: string;
+  calls: number;
+  total_cost: number;
+  total_duration_ms: number;
+  avg_duration_ms: number;
+  share_pct: number;
+};
+
+export type CopilotSignalsHookRow = {
+  hook: string;
+  total: number;
+  success: number;
+  failed: number;
+  success_rate_pct: number;
+};
+
+export type CopilotSignalsResponse = {
+  window: string;
+  from_ns: string;
+  to_ns: string;
+  total_calls: number;
+  calls_with_signals: number;
+  repos: CopilotSignalsRepoRow[];
+  tools: CopilotSignalsToolRow[];
+  hooks: CopilotSignalsHookRow[];
+};
+
 export const copilotApi = {
   summary: (window = "24h", agent = "all") =>
     get<CopilotSummary>(`/api/copilot/summary?window=${window}&agent=${encodeURIComponent(agent)}`),
@@ -89,6 +124,10 @@ export const copilotApi = {
     const qs = new URLSearchParams({ from, to, limit: String(Math.max(1, Math.min(limit, 100))) });
     return get<CopilotLeaderboardResponse>(`/api/copilot/leaderboard?${qs.toString()}`);
   },
+  signals: (window = "7d", agent = "all", limit = 8) =>
+    get<CopilotSignalsResponse>(
+      `/api/copilot/signals?window=${window}&agent=${encodeURIComponent(agent)}&limit=${Math.max(1, Math.min(limit, 50))}`,
+    ),
   clear: async () => {
     const res = await fetch("/api/copilot/clear", { method: "DELETE" });
     if (!res.ok) throw new Error("clear failed");
