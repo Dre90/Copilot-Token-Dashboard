@@ -48,6 +48,25 @@ function flattenAttributes(attrs: any[] | undefined): Record<string, unknown> {
   return out;
 }
 
+function pick(a: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const k of keys) if (a[k] !== undefined && a[k] !== null) return a[k];
+  return undefined;
+}
+
+function findByKey(a: Record<string, unknown>, ...patterns: RegExp[]): unknown {
+  for (const k of Object.keys(a)) {
+    for (const p of patterns) {
+      if (p.test(k) && a[k] !== undefined && a[k] !== null) return a[k];
+    }
+  }
+  return undefined;
+}
+
+function num(v: unknown): number {
+  const n = typeof v === "string" ? Number(v) : (v as number);
+  return Number.isFinite(n) ? Math.trunc(n) : 0;
+}
+
 function nsToMs(ns: bigint): number {
   return Number(ns / 1_000_000n) + Number(ns % 1_000_000n) / 1_000_000;
 }
@@ -62,6 +81,39 @@ function parseTraces(req: any): void {
       for (const s of ss.spans ?? []) {
         const startNs = toBigInt(s.startTimeUnixNano);
         const endNs = toBigInt(s.endTimeUnixNano);
+        const flatAttrs = {
+          ...resourceAttrs,
+          scope: scopeName,
+          ...flattenAttributes(s.attributes),
+        };
+        const llmModel = String(
+          pick(flatAttrs, "gen_ai.response.model", "gen_ai.request.model", "llm.model", "model") ??
+            "",
+        );
+        const llmAgent = String(
+          pick(
+            flatAttrs,
+            "copilot.chat.agent",
+            "copilot.chat.command",
+            "gen_ai.agent.name",
+            "copilot.chat.location",
+            "copilot.chat.intent",
+          ) ?? "",
+        );
+        const inputTokens = num(findByKey(flatAttrs, /(^|\.)(input|prompt).?tokens$/i));
+        const outputTokens = num(findByKey(flatAttrs, /(^|\.)(output|completion).?tokens$/i));
+        const cacheReadTokens = num(
+          findByKey(flatAttrs, /cache.?read.*tokens?$/i, /cached.?(input.?)?tokens?$/i),
+        );
+        const cacheCreationTokens = num(findByKey(flatAttrs, /cache.?(creation|write).*tokens?$/i));
+        const isLlmCall =
+          (s.name ?? "") === "chat" ||
+          inputTokens > 0 ||
+          outputTokens > 0 ||
+          cacheReadTokens > 0 ||
+          cacheCreationTokens > 0
+            ? 1
+            : 0;
         const row = {
           span_id: toHex(s.spanId),
           trace_id: toHex(s.traceId),
@@ -72,11 +124,14 @@ function parseTraces(req: any): void {
           end_ns: endNs.toString(),
           duration_ms: nsToMs(endNs - startNs),
           status_code: s.status?.code ?? 0,
-          attributes: JSON.stringify({
-            ...resourceAttrs,
-            scope: scopeName,
-            ...flattenAttributes(s.attributes),
-          }),
+          attributes: JSON.stringify(flatAttrs),
+          llm_model: llmModel,
+          llm_agent: llmAgent,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          cache_read_tokens: cacheReadTokens,
+          cache_creation_tokens: cacheCreationTokens,
+          is_llm_call: isLlmCall,
         };
         insertSpan.run(row);
         broadcast("span", {

@@ -227,6 +227,7 @@ export function rowToCall(row: any): Call {
 }
 
 const SQL_MODEL_EXPR = `COALESCE(
+  NULLIF(llm_model, ''),
   json_extract(attributes, '$."gen_ai.response.model"'),
   json_extract(attributes, '$."gen_ai.request.model"'),
   json_extract(attributes, '$."llm.model"'),
@@ -234,6 +235,7 @@ const SQL_MODEL_EXPR = `COALESCE(
 )`;
 
 const SQL_AGENT_EXPR = `COALESCE(
+  NULLIF(llm_agent, ''),
   json_extract(attributes, '$."copilot.chat.agent"'),
   json_extract(attributes, '$."copilot.chat.command"'),
   json_extract(attributes, '$."gen_ai.agent.name"'),
@@ -242,6 +244,7 @@ const SQL_AGENT_EXPR = `COALESCE(
 )`;
 
 const SQL_INPUT_EXPR = `COALESCE(
+  CAST(input_tokens AS REAL),
   CAST(json_extract(attributes, '$."gen_ai.usage.input_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."llm.usage.prompt_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."usage.prompt_tokens"') AS REAL),
@@ -249,6 +252,7 @@ const SQL_INPUT_EXPR = `COALESCE(
 )`;
 
 const SQL_OUTPUT_EXPR = `COALESCE(
+  CAST(output_tokens AS REAL),
   CAST(json_extract(attributes, '$."gen_ai.usage.output_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."llm.usage.completion_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."usage.completion_tokens"') AS REAL),
@@ -256,6 +260,7 @@ const SQL_OUTPUT_EXPR = `COALESCE(
 )`;
 
 const SQL_CACHE_READ_EXPR = `COALESCE(
+  CAST(cache_read_tokens AS REAL),
   CAST(json_extract(attributes, '$."gen_ai.usage.cache_read.input_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."gen_ai.usage.cache_read_input_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."gen_ai.usage.cached_input_tokens"') AS REAL),
@@ -264,13 +269,14 @@ const SQL_CACHE_READ_EXPR = `COALESCE(
 )`;
 
 const SQL_CACHE_CREATE_EXPR = `COALESCE(
+  CAST(cache_creation_tokens AS REAL),
   CAST(json_extract(attributes, '$."gen_ai.usage.cache_creation.input_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."gen_ai.usage.cache_creation_input_tokens"') AS REAL),
   CAST(json_extract(attributes, '$."llm.usage.cache_creation_tokens"') AS REAL),
   0
 )`;
 
-const SQL_LLM_WHERE = `(name = 'chat' OR attributes LIKE '%gen_ai.usage%' OR attributes LIKE '%llm.usage%')`;
+const SQL_LLM_WHERE = `(is_llm_call = 1 OR name = 'chat' OR attributes LIKE '%gen_ai.usage%' OR attributes LIKE '%llm.usage%')`;
 
 // We treat any LLM span as a "call". Copilot's chat span is named 'chat',
 // but be liberal and match any span that has gen_ai usage attributes.
